@@ -1,0 +1,21 @@
+# This file lists all the extra Python packages our project needs to run.
+# You can install them all at once by running: pip install -r requirements.txt
+
+# FastAPI is the web framework we use to build the backend server
+fastapi
+
+# Uvicorn is the actual web server program that runs the FastAPI code
+uvicorn
+
+# Pydantic is used by FastAPI to make sure the data we receive and send is formatted correctly
+pydantic
+
+# Database ORM and PostgreSQL adapter
+sqlalchemy
+psycopg2-binary
+
+# Enterprise RAG dependencies
+PyPDF2
+python-docx
+qdrant-client
+sentence-transformers

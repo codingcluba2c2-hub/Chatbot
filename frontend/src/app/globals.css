@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #2563EB;
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-background: #F8FAFC;
+  --color-cards: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-text-main: #111827;
+  --color-secondary: #6B7280;
+  
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --animate-gradient-xy: gradient-xy 15s ease infinite;
+
+  @keyframes gradient-xy {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+}
+
+.dark {
+  --color-background: #0f172a; /* Slate 900 */
+  --color-cards: #1e293b; /* Slate 800 */
+  --color-border: #334155; /* Slate 700 */
+  --color-text-main: #f8fafc; /* Slate 50 */
+  --color-secondary: #94a3b8; /* Slate 400 */
+}
+
+@layer base {
+  :root {
+    --background: #F8FAFC;
+    --foreground: #111827;
+  }
+  * {
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+  }
+  html, body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    height: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  button, 
+  a, 
+  select, 
+  [role="button"],
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"] {
+    cursor: pointer !important;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #E5E7EB;
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #D1D5DB;
+  }
+}
