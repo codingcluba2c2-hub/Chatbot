@@ -6,7 +6,9 @@ from pipeline.pipeline_runner import PipelineRunner
 from pipeline.pipeline_context import PipelineContext
 
 from steps.normalize_step import NormalizeStep
+from steps.spell_correction_step import SpellCorrectionStep
 from steps.conversation_opener_step import ConversationOpenerStep
+from steps.assistant_preference_step import AssistantPreferenceStep
 from steps.session_memory_step import SessionMemoryStep
 from steps.meaningful_validator_step import MeaningfulValidatorStep
 from steps.gibberish_step import GibberishStep
@@ -21,7 +23,9 @@ from steps.semantic_cache_step import SemanticCacheStep
 
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
+pipeline_runner.register_step("SpellCorrection", SpellCorrectionStep())
 pipeline_runner.register_step("ConversationOpener", ConversationOpenerStep())
+pipeline_runner.register_step("AssistantPreference", AssistantPreferenceStep())
 pipeline_runner.register_step("SessionMemory", SessionMemoryStep())
 pipeline_runner.register_step("Farewell", FarewellStep())
 pipeline_runner.register_step("MeaningfulValidator", MeaningfulValidatorStep())

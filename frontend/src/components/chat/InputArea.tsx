@@ -1,9 +1,8 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Send, Paperclip, Mic } from 'lucide-react';
+import { Send, Menu, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Tooltip } from './Tooltip';
-import { SuggestionBar } from './SuggestionBar';
 
 export interface InputAreaRef {
   focus: () => void;
@@ -46,27 +45,18 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
   };
 
   return (
-    <div className="bg-[var(--color-cards)]/80 backdrop-blur-md border-t border-[var(--color-border)] p-3 sm:p-4 sm:rounded-b-2xl shadow-sm relative z-20 transition-colors duration-300">
-      
-      <SuggestionBar isVisible={input.trim() === ''} onSuggestionClick={onSuggestionClick} />
+    <div className="bg-white dark:bg-[#0a0f1c] p-4 pt-2 relative z-20 transition-colors duration-300">
 
       {/* Input Form */}
-      <form onSubmit={handleSend} className="relative flex items-end gap-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-2xl p-1.5 shadow-inner focus-within:bg-[var(--color-cards)] focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300">
+      <form onSubmit={handleSend} className="relative flex items-end gap-2 bg-white dark:bg-slate-900 border-2 border-gray-200/80 dark:border-slate-700/80 rounded-full px-2.5 py-1.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300">
         
         {/* Left Actions */}
-        <div className="flex items-center gap-1 mb-1 sm:mb-1.5 ml-1">
-          <Tooltip content="File upload coming soon">
-            <button type="button" className="p-2 text-gray-300 cursor-not-allowed rounded-full" aria-label="Attach file">
-              <Paperclip size={20} />
+        <div className="flex items-center gap-1 mb-0.5 ml-1">
+          <Tooltip content="Menu">
+            <button type="button" className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-full transition-colors" aria-label="Menu">
+              <Menu size={18} />
             </button>
           </Tooltip>
-          <div className="hidden sm:block">
-            <Tooltip content="Voice input coming soon">
-              <button type="button" className="p-2 text-gray-300 cursor-not-allowed rounded-full" aria-label="Voice input">
-                <Mic size={20} />
-              </button>
-            </Tooltip>
-          </div>
         </div>
 
         {/* Textarea */}
@@ -75,22 +65,29 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Type your message... (Press '/' to focus)"
+          placeholder="Type your message..."
           disabled={isLoading}
           rows={1}
-          className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-sm sm:text-[0.95rem] py-2 px-2 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500"
+          className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-[12px] md:text-[14px] py-2.5 px-1 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-800 dark:text-gray-100 font-medium"
         />
 
         {/* Right Actions */}
-        <div className="mb-1 sm:mb-1.5 mr-1">
+        <div className="mb-0.5 mr-0.5 flex items-center gap-1">
+          <div className="hidden sm:block">
+            <Tooltip content="Voice Input">
+              <button type="button" className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-full transition-colors mr-1" aria-label="Voice input">
+                <Mic size={18} />
+              </button>
+            </Tooltip>
+          </div>
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
             className={cn(
-              "flex items-center justify-center p-2.5 rounded-xl transition-all shadow-sm",
+              "flex items-center justify-center w-[38px] h-[38px] rounded-full transition-all duration-300",
               !input.trim() || isLoading
-                ? "bg-[var(--color-border)] text-[var(--color-secondary)] cursor-not-allowed"
-                : "bg-gradient-to-br from-blue-600 to-blue-700 text-white hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                ? "bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-500"
+                : "bg-[#0082FB] hover:bg-blue-600 text-white shadow-sm hover:scale-105 active:scale-95"
             )}
             aria-label="Send message"
           >
@@ -101,11 +98,18 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
                 className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
               />
             ) : (
-              <Send size={18} className="ml-0.5" />
+              <Send size={16} className="-ml-0.5" />
             )}
           </button>
         </div>
       </form>
+      
+      {/* Footer Text */}
+      <div className="mt-3 flex justify-center items-center text-[10px] text-gray-400 font-medium gap-1">
+        <a href="#" className="hover:text-blue-500 transition-colors">Privacy & Policy</a>
+        <span className="text-gray-300">|</span>
+        <span>Powered By <span className="font-semibold text-gray-500">Converiqo.ai</span></span>
+      </div>
     </div>
   );
 });

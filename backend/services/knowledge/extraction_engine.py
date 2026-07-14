@@ -16,26 +16,37 @@ class ExtractionEngine:
         # 2. Control Character Removal
         text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
         
-        # Fix PDF line breaks: join lines that are clearly mid-sentence
-        # If line ends with word char/comma/hyphen and next starts with lower case
-        text = re.sub(r'([a-zA-Z0-9,\-])[ \t]*\n[ \t]*([a-z])', r'\1 \2', text)
+        # 3. Header/Footer/Page Number Removal
+        # e.g. "Page 1 of 10", "Confidential", etc.
+        text = re.sub(r'(?im)^page\s+\d+(\s+of\s+\d+)?\s*$', '', text)
+        text = re.sub(r'(?im)^confidential\s*$', '', text)
+        text = re.sub(r'(?im)^\d+\s*\|\s*page\s*$', '', text)
         
+        # 4. Hyphenated Word Repair
+        # e.g., "appli- \ncation" -> "application"
+        text = re.sub(r'([a-zA-Z]+)-\s*\n\s*([a-zA-Z]+)', r'\1\2', text)
+        
+        # 5. Wrapped Line Repair
+        # If line ends with word char/comma and next starts with lower case
+        text = re.sub(r'([a-zA-Z0-9,])[ \t]*\n[ \t]*([a-z])', r'\1 \2', text)
+        
+        # 6. Paragraph Reconstruction
         # If line ends with period/question/exclamation, it might be end of paragraph. Ensure double newline.
         text = re.sub(r'([.!?])[ \t]*\n[ \t]*([A-Z])', r'\1\n\n\2', text)
         
-        # 3. Remove Empty Lines and Extra Whitespace
+        # 7. Remove Empty Lines and Extra Whitespace
         # Merge multiple newlines into two to preserve paragraph structure
         text = re.sub(r'\n{3,}', '\n\n', text)
         # Clean trailing/leading spaces on lines
         text = '\n'.join([line.strip() for line in text.split('\n')])
         
-        # 4. Remove extra spaces between words
+        # 8. Remove extra spaces between words
         text = re.sub(r'[ \t]+', ' ', text)
         
         return text.strip()
 
     @staticmethod
-    def extract_text(file_path: str, file_type: str) -> Tuple[str, Dict[str, int]]:
+    def extract_text(file_path: str, file_type: str) -> Tuple[str, str, Dict[str, int]]:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
             
@@ -82,12 +93,11 @@ class ExtractionEngine:
         words = cleaned_text.split()
         word_count = len(words)
         paragraphs = [p for p in cleaned_text.split('\n\n') if p.strip()]
-        paragraph_count = len(paragraphs)
         
         stats = {
             "characters": char_count,
             "words": word_count,
-            "paragraphs": paragraph_count
+            "paragraphs": len(paragraphs)
         }
         
-        return cleaned_text, stats
+        return text, cleaned_text, stats

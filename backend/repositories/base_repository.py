@@ -43,37 +43,48 @@ class BaseRepository(Generic[T, D]):
         if cache_key in self._cache and (now - self._cache_times.get(cache_key, 0)) < 3600:
             return self._cache[cache_key]
             
-        with SessionLocal() as session:
-            stmt = session.query(self.db_model)
-            
-            if query:
-                # Basic search on string columns
-                query_lower = f"%{query.lower()}%"
-                string_columns = [c for c in self.db_model.__table__.columns if c.type.python_type is str]
-                if string_columns:
-                    filters = [c.ilike(query_lower) for c in string_columns]
-                    stmt = stmt.filter(or_(*filters))
-                    
-            if hasattr(self.db_model, sort_by):
-                sort_col = getattr(self.db_model, sort_by)
-                if descending:
-                    stmt = stmt.order_by(desc(sort_col))
-                else:
-                    stmt = stmt.order_by(asc(sort_col))
-            else:
-                if hasattr(self.db_model, "created_at"):
-                    stmt = stmt.order_by(desc(self.db_model.created_at))
-                    
-            stmt = stmt.offset(skip).limit(limit)
-            db_items = stmt.all()
-            
-            results = [self._to_pydantic(item) for item in db_items if item is not None]
-            
-            self._cache[cache_key] = results
-            self._cache_times[cache_key] = now
-            
-            return results
+        from sqlalchemy.exc import OperationalError
         
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                with SessionLocal() as session:
+                    stmt = session.query(self.db_model)
+                    
+                    if query:
+                        # Basic search on string columns
+                        query_lower = f"%{query.lower()}%"
+                        string_columns = [c for c in self.db_model.__table__.columns if c.type.python_type is str]
+                        if string_columns:
+                            filters = [c.ilike(query_lower) for c in string_columns]
+                            if filters:
+                                stmt = stmt.filter(or_(*filters))
+                                
+                    if hasattr(self.db_model, sort_by):
+                        sort_col = getattr(self.db_model, sort_by)
+                        if descending:
+                            stmt = stmt.order_by(desc(sort_col))
+                        else:
+                            stmt = stmt.order_by(asc(sort_col))
+                    else:
+                        if hasattr(self.db_model, "created_at"):
+                            stmt = stmt.order_by(desc(self.db_model.created_at))
+                            
+                    stmt = stmt.offset(skip).limit(limit)
+                    db_items = stmt.all()
+                    
+                    results = [self._to_pydantic(item) for item in db_items if item is not None]
+                    
+                    self._cache[cache_key] = results
+                    self._cache_times[cache_key] = now
+                    
+                    return results
+            except OperationalError:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                else:
+                    raise
+        return []
     def get_by_id(self, item_id: str) -> Optional[T]:
         if not self.db_model:
             return None

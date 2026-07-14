@@ -17,12 +17,13 @@ class QdrantProvider(VectorStoreProvider):
                 # Production/Cloud Qdrant
                 self.client = QdrantClient(
                     url=QDRANT_URL,
-                    api_key=QDRANT_API_KEY
+                    api_key=QDRANT_API_KEY,
+                    timeout=60.0
                 )
             else:
                 # Local Persistent or Memory Qdrant fallback
                 path = ":memory:" if QDRANT_URL == ":memory:" else None
-                self.client = QdrantClient(path if path else QDRANT_URL)
+                self.client = QdrantClient(path if path else QDRANT_URL, timeout=60.0)
                 
             # Create collection if not exists
             if not self.client.collection_exists(self.collection_name):

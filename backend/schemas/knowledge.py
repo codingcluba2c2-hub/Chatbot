@@ -21,6 +21,7 @@ class KnowledgeDocument(BaseModel):
     error_message: Optional[str] = None
     processing_stats: Dict[str, Any] = Field(default_factory=dict)
     file_hash: Optional[str] = None
+    raw_text: Optional[str] = None
 
 class DocumentChunk(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

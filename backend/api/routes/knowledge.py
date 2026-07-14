@@ -49,8 +49,13 @@ def process_document_bg(doc_id: str, file_path: str, file_type: str):
         log_step("Starting text extraction & cleaning...")
         doc = update_doc_status(doc_id, "extracting")
         t0 = time.time()
-        text, extraction_stats = ExtractionEngine.extract_text(file_path, file_type)
+        raw_text, text, extraction_stats = ExtractionEngine.extract_text(file_path, file_type)
         stats.update(extraction_stats)
+        
+        # Save raw text for debugging
+        doc.raw_text = raw_text
+        document_repo.update(doc_id, doc)
+        
         log_step(f"Extraction complete in {time.time() - t0:.2f}s")
         
         # Get dynamic settings
@@ -258,11 +263,22 @@ def reprocess_document(doc_id: str, background_tasks: BackgroundTasks):
     if not doc:
         raise HTTPException(404, "Document not found")
     
-    # Delete old chunks from DB (Optional, or Qdrant handles it)
+    # Delete old chunks from DB and Vector Store
     all_chunks = chunk_repo.get_all()
     old_chunks = [c for c in all_chunks if c.document_id == doc_id]
+    old_chunk_ids = [c.id for c in old_chunks]
+    
     for c in old_chunks:
         chunk_repo.delete(c.id)
+        
+    # Delete existing vectors from vector database
+    try:
+        if old_chunk_ids:
+            from services.rag.vector_store import get_vector_store
+            vector_store = get_vector_store()
+            vector_store.delete(old_chunk_ids)
+    except Exception as e:
+        print(f"Warning: Failed to delete vectors: {e}")
         
     # Reset stats
     doc.processing_stats = {}

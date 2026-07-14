@@ -14,6 +14,15 @@ class FastPathRouterStep(PipelineStep):
             context.metadata["fastpath_routed"] = True
             context.metadata["fastpath_key"] = fastpath_key
             
+            if fastpath_key.lower() == "who are you":
+                memory = context.metadata.get("memory", {})
+                assistant_name = memory.get("assistant_name")
+                
+                if assistant_name:
+                    response = f"I'm {assistant_name}, your Enterprise AI Assistant for Mobiloitte."
+                else:
+                    response = "I am your Enterprise AI Assistant for Mobiloitte."
+            
             # Stop the pipeline and return the exact configured response
             return PipelineResult(
                 continue_pipeline=False,

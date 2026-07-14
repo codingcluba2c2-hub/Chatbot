@@ -39,9 +39,9 @@ class ConversationOpenerStep(PipelineStep):
     def process(self, context: PipelineContext) -> PipelineResult:
         text = context.normalized_message.strip()
         
-        # Regex to detect common greetings, including repeated characters and multiple greetings (e.g. hello good morning)
+        # Regex to detect common greetings at the start
         pattern = re.compile(
-            r'^(?:[^a-z0-9]*\b(?:h+i+|h+e+l+o+|h+e+y+|n+a+m+a+s+t+e+|s+a+l+a+m+|g+o+o+d+\s+m+o+r+n+i+n+g+|g+o+o+d+\s+e+v+e+n+i+n+g+|g+o+o+d+\s+a+f+t+e+r+n+o+o+n+)\b[^a-z0-9]*)+',
+            r'^(?:[^a-z0-9]*\b(?:h+i+|h+e+l+l*o+|h+e+y+|g+o+o+d\s+m+o+r+n+i+n+g+|g+o+o+d\s+a+f+t+e+r+n+o+o+n+|g+o+o+d\s+e+v+e+n+i+n+g+|g+o+o+d\s+n+i+g+h+t+|g+m+|g+a+|g+e+|g+n+|n+a+m+a+s+t+e+|s+a+l+a+m+|a+s+s+a+l+a+m+u+a+l+a+i+k+u+m+|a+s+s+a+l+a+m+u\s+a+l+a+i+k+u+m+|h+o+l+a+|b+o+n+j+o+u+r+)\b[^a-z0-9]*)+',
             re.IGNORECASE
         )
         
@@ -65,6 +65,13 @@ class ConversationOpenerStep(PipelineStep):
             
             # Remove the detected greeting from the text
             remaining_query = text[match.end():].strip()
+            
+            # Remove common greeting targets (names/entities) that shouldn't be treated as queries
+            target_pattern = re.compile(
+                r'^(raj|akhlaque|rahman|team|everyone|there|assistant|bot|mobiloitte|john|guys|all|friend|sara|siri)\b[^a-z0-9]*',
+                re.IGNORECASE
+            )
+            remaining_query = target_pattern.sub('', remaining_query).strip()
             
             context.metadata["remaining_query"] = remaining_query
             

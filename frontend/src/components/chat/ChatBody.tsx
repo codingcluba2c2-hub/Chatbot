@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, ArrowDown } from 'lucide-react';
+import { ArrowDown, Calendar, LayoutGrid, Briefcase, Mail } from 'lucide-react';
 import { ChatMessage, MessageProps } from './ChatMessage';
 import { TypingIndicator } from './TypingIndicator';
 import { ThinkingIndicator } from './ThinkingIndicator';
@@ -36,41 +36,57 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
     setShowScrollButton(!isNearBottom);
   };
 
+  const suggestions = [
+    { icon: <Calendar size={16} />, text: "Office Timings" },
+    { icon: <LayoutGrid size={16} />, text: "Our Services" },
+    { icon: <Briefcase size={16} />, text: "Career Opportunities" },
+    { icon: <Mail size={16} />, text: "Contact Us" },
+  ];
+
   return (
     <div 
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 bg-[var(--color-background)]/50 flex flex-col relative transition-colors duration-300"
+      className="flex-1 overflow-y-auto custom-scrollbar px-4 py-6 bg-white dark:bg-[#0a0f1c] flex flex-col relative transition-colors duration-300"
     >
       {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center mt-4 mb-10">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 mb-5 shadow-sm border border-blue-50 dark:border-blue-800/50"
-          >
-            <Bot size={40} />
-          </motion.div>
-          <motion.h2 
+        <div className="flex-1 flex flex-col justify-start pt-2 w-full relative z-10">
+          
+          {/* Initial Welcome Message matching screenshot */}
+          <div className="flex w-full mb-8 space-x-3 justify-start">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-blue-600 mt-auto z-10 border border-gray-100 dark:border-slate-800">
+              <span className="font-bold text-lg italic tracking-tighter" style={{ fontFamily: 'Georgia, serif' }}>M</span>
+            </div>
+            <div className="flex flex-col max-w-[75%] items-start -ml-1">
+              <div className="relative px-4 py-3 text-[13px] md:text-[14px] xl:text-[15px] leading-relaxed break-words whitespace-pre-wrap transition-all duration-300 bg-white border border-gray-100 text-gray-800 rounded-[20px] rounded-bl-[4px] dark:bg-slate-800 dark:border-slate-700/60 dark:text-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+                Hi, I am Sara, Mobiloitte's virtual agent.<br/>How can I help you today?
+                <div className="flex justify-end text-[0.65rem] text-gray-400 mt-2 font-medium">
+                  {format(new Date(), 'h:mm a')}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <motion.div 
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-xl sm:text-2xl font-bold text-[var(--color-text-main)] mb-2"
+            className="grid grid-cols-2 gap-2 w-full mx-auto"
           >
-            AI Assistant
-          </motion.h2>
-          <motion.p 
-            initial={{ y: 10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-[var(--color-secondary)] max-w-sm mb-8"
-          >
-            Hello! I'm your Enterprise AI Assistant. I can help you with:
-          </motion.p>
+            {suggestions.map((item, idx) => (
+               <button 
+                 key={idx}
+                 onClick={() => onSuggestionClick(item.text)}
+                 className="flex items-center justify-center gap-2 px-3 py-3 bg-[#0082FB] hover:bg-blue-600 text-white rounded-xl transition-all shadow-sm font-semibold text-[11px] md:text-[12px] xl:text-[13px]"
+               >
+                 {item.icon}
+                 <span>{item.text}</span>
+               </button>
+            ))}
+          </motion.div>
         </div>
       ) : (
-        <div className="flex flex-col gap-2 pb-4">
+        <div className="flex flex-col gap-4 pb-4 relative z-10">
           <AnimatePresence initial={false}>
             {messages.map((msg, index) => {
               const showDateDivider = index === 0 || !isSameDay(new Date(msg.timestamp), new Date(messages[index - 1].timestamp));
@@ -90,7 +106,7 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
                 <React.Fragment key={msg.id}>
                   {showDateDivider && (
                      <div className="flex justify-center my-6">
-                       <span className="text-xs font-medium text-[var(--color-secondary)] bg-[var(--color-cards)] px-3 py-1 rounded-full shadow-sm border border-[var(--color-border)]">
+                       <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest bg-white dark:bg-slate-800 px-4 py-1.5 rounded-full shadow-sm border border-gray-100 dark:border-slate-700/50">
                          {dateDividerText}
                        </span>
                      </div>
@@ -119,21 +135,6 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
           <div ref={messagesEndRef} className="h-4" />
         </div>
       )}
-      
-      {/* Floating Scroll Button */}
-      <AnimatePresence>
-        {showScrollButton && messages.length > 0 && (
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            onClick={() => scrollToBottom()}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-4 py-2 bg-[var(--color-cards)]/90 backdrop-blur-sm border border-[var(--color-border)] shadow-md rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-blue-700 dark:hover:text-blue-300 transition-colors z-30"
-          >
-            <ArrowDown size={14} /> New Messages
-          </motion.button>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

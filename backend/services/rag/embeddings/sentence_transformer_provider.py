@@ -37,5 +37,7 @@ class SentenceTransformerProvider(BaseEmbeddingProvider):
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         if not self.model: return [[0.0] * self._dimension for _ in texts]
-        embeddings = self.model.encode(texts)
+        import os
+        os.environ["OMP_NUM_THREADS"] = "1"
+        embeddings = self.model.encode(texts, batch_size=8, show_progress_bar=False)
         return embeddings.tolist()

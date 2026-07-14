@@ -21,6 +21,7 @@ class KnowledgeDocumentDB(Base):
     error_message = Column(String, nullable=True)
     processing_stats = Column(JSON, default=dict)
     file_hash = Column(String, nullable=True, index=True)
+    raw_text = Column(String, nullable=True)
 
 class DocumentChunkDB(Base):
     __tablename__ = "document_chunks"

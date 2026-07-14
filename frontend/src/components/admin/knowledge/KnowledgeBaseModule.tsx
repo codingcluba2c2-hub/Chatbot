@@ -40,15 +40,40 @@ export const KnowledgeBaseModule = () => {
       setRetrievalLoading(false);
     }
   };
+  const [isReprocessing, setIsReprocessing] = useState(false);
+
+  const getProcessingPercentage = (status: string) => {
+    switch (status) {
+      case 'validating': return 10;
+      case 'extracting': return 30;
+      case 'chunking': return 60;
+      case 'embedding': return 80;
+      case 'indexing': return 95;
+      case 'published': return 100;
+      case 'failed': return 0;
+      case 'processing': return 5;
+      default: return 0;
+    }
+  };
+
   const handleReprocess = async () => {
     if (!selectedDoc) return;
+    setIsReprocessing(true);
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       await fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc.id}/reprocess`, { method: "POST" });
-      setSelectedDoc(null);
-      fetchDocuments();
+      
+      const res = await fetch(`${backendUrl}/api/knowledge/documents`);
+      if(res.ok) {
+        const docs = await res.json();
+        setDocuments(docs);
+        const updated = docs.find((d: any) => d.id === selectedDoc.id);
+        if (updated) setSelectedDoc(updated);
+      }
     } catch(e) {
       console.error(e);
+    } finally {
+      setIsReprocessing(false);
     }
   };
 
@@ -70,7 +95,33 @@ export const KnowledgeBaseModule = () => {
 
   useEffect(() => {
     fetchDocuments();
-  }, []);
+    
+    // Poll every 3 seconds if any document is still processing
+    const hasProcessing = documents.some(d => d.status !== 'published' && d.status !== 'failed');
+    if (!hasProcessing) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const res = await fetch(`${backendUrl}/api/knowledge/documents`);
+        if(res.ok) {
+          const data = await res.json();
+          setDocuments(data);
+          // If a document is selected, update it too
+          if (selectedDoc) {
+            const updated = data.find((d: any) => d.id === selectedDoc.id);
+            if (updated && updated.status !== selectedDoc.status) {
+              setSelectedDoc(updated);
+            }
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [documents.some(d => d.status !== 'published' && d.status !== 'failed'), selectedDoc?.id]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -242,14 +293,27 @@ export const KnowledgeBaseModule = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 text-xs font-semibold rounded-full capitalize ${
-                      doc.status === 'published' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                      doc.status === 'processing' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                      doc.status === 'failed' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400' :
-                      'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                    }`}>
-                      {doc.status}
-                    </span>
+                    <div className="relative overflow-hidden inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold w-[120px]">
+                      {doc.status !== 'published' && doc.status !== 'failed' && (
+                        <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/40">
+                           <div 
+                             className="h-full bg-blue-300 dark:bg-blue-600/60 transition-all duration-500 ease-out" 
+                             style={{ width: `${getProcessingPercentage(doc.status)}%` }}
+                           />
+                        </div>
+                      )}
+                      {doc.status === 'published' && <div className="absolute inset-0 bg-emerald-100 dark:bg-emerald-900/30" />}
+                      {doc.status === 'failed' && <div className="absolute inset-0 bg-rose-100 dark:bg-rose-900/30" />}
+                      
+                      <span className={`relative z-10 w-full text-center capitalize ${
+                        doc.status === 'published' ? 'text-emerald-700 dark:text-emerald-400' :
+                        doc.status === 'failed' ? 'text-rose-700 dark:text-rose-400' :
+                        'text-blue-800 dark:text-blue-200 drop-shadow-sm'
+                      }`}>
+                        {doc.status}
+                        {doc.status !== 'published' && doc.status !== 'failed' && ` ${getProcessingPercentage(doc.status)}%`}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.chunk_count}</td>
                   <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{doc.file_size ? Math.round(doc.file_size/1024) : 0}</td>
@@ -287,6 +351,7 @@ export const KnowledgeBaseModule = () => {
             <div className="flex border-b border-slate-200 dark:border-slate-800 px-6 pt-2 gap-4">
               <button onClick={() => setActiveTab('metadata')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'metadata' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Metadata</button>
               <button onClick={() => setActiveTab('chunks')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'chunks' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Chunks</button>
+              <button onClick={() => setActiveTab('raw')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'raw' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Raw Extracted Text</button>
               <button onClick={() => setActiveTab('retrieval')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'retrieval' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Retrieval Test</button>
             </div>
 
@@ -296,8 +361,12 @@ export const KnowledgeBaseModule = () => {
                   <div>
                     <div className="flex justify-between items-center mb-3">
                       <h3 className="font-semibold text-xs uppercase tracking-wider text-slate-500">Document Profile</h3>
-                      <button onClick={handleReprocess} className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded text-xs font-medium transition">
-                        <RefreshCw size={14} /> Reprocess
+                      <button 
+                        onClick={handleReprocess} 
+                        disabled={isReprocessing || (selectedDoc.status !== 'published' && selectedDoc.status !== 'failed')}
+                        className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <RefreshCw size={14} className={isReprocessing || (selectedDoc.status !== 'published' && selectedDoc.status !== 'failed') ? "animate-spin" : ""} /> Reprocess
                       </button>
                     </div>
                     <div className="space-y-2 text-sm">
@@ -344,14 +413,51 @@ export const KnowledgeBaseModule = () => {
                   ) : (
                     documentChunks.map(chunk => (
                       <div key={chunk.id} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                        <div className="flex justify-between items-center mb-2">
-                           <span className="text-xs font-semibold px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded">Chunk #{chunk.metadata.chunk_number}</span>
-                           <span className="text-xs text-slate-500">{chunk.metadata.character_count} chars • ~{chunk.metadata.estimated_tokens} tokens</span>
+                        <div className="flex justify-between items-center mb-3">
+                           <div className="flex items-center gap-2">
+                             <span className="text-xs font-bold px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded">Chunk #{chunk.metadata.chunk_number}</span>
+                             {chunk.metadata.page_number && <span className="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300">Page {chunk.metadata.page_number}</span>}
+                             {chunk.metadata.section && <span className="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300">{chunk.metadata.section}</span>}
+                           </div>
+                           <span className="text-xs font-medium text-slate-500">{chunk.metadata.character_count} chars • ~{chunk.metadata.estimated_tokens} tokens</span>
                         </div>
+                        
+                        {(chunk.metadata.first_sentence || chunk.metadata.last_sentence) && (
+                          <div className="mb-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-700/50 space-y-2">
+                            {chunk.metadata.first_sentence && (
+                              <div className="text-xs">
+                                <span className="font-semibold text-emerald-600 dark:text-emerald-400 mr-2">START:</span>
+                                <span className="text-slate-600 dark:text-slate-400 italic">"{chunk.metadata.first_sentence}"</span>
+                              </div>
+                            )}
+                            {chunk.metadata.last_sentence && (
+                              <div className="text-xs">
+                                <span className="font-semibold text-rose-600 dark:text-rose-400 mr-2">END:</span>
+                                <span className="text-slate-600 dark:text-slate-400 italic">"{chunk.metadata.last_sentence}"</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Full Content</div>
                         <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{chunk.content}</p>
                       </div>
                     ))
                   )}
+                </div>
+              )}
+              
+              {activeTab === 'raw' && (
+                <div className="flex flex-col h-full bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
+                  <div className="p-3 bg-slate-800 text-slate-300 text-xs font-mono border-b border-slate-700 flex justify-between">
+                    <span>Raw Extracted Text</span>
+                    <span>{selectedDoc.raw_text ? selectedDoc.raw_text.length : 0} bytes</span>
+                  </div>
+                  <div className="flex-1 overflow-auto p-4">
+                    <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap">
+                      {selectedDoc.raw_text || "No raw text available for this document."}
+                    </pre>
+                  </div>
                 </div>
               )}
 

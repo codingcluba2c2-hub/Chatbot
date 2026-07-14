@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Bug } from "lucide-react";
+import { Bug, ArrowRight, ChevronDown } from "lucide-react";
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatBody } from "@/components/chat/ChatBody";
 import { InputArea, InputAreaRef } from "@/components/chat/InputArea";
@@ -22,6 +24,10 @@ export default function Home() {
   const [toastMessage, setToastMessage] = useState("");
   const [responseTimes, setResponseTimes] = useState<number[]>([]);
   
+  // Enterprise UI States
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
+
   // Developer Mode States
   const [isDevModeOpen, setIsDevModeOpen] = useState(false);
   const [selectedTraceMessageId, setSelectedTraceMessageId] = useState<string | null>(null);
@@ -46,18 +52,20 @@ export default function Home() {
       }
       // / to focus input (if not already focused)
       if (e.key === '/' && document.activeElement?.tagName !== 'TEXTAREA') {
+        if (!isChatOpen) {
+          setIsChatOpen(true);
+        }
         e.preventDefault();
         focusInput();
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+  }, [isChatOpen]);
 
   const ensureBackend = async () => {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     try {
-      // Don't spam console if possible, but fetch native will log. We catch to prevent throw.
       await fetch(`${backendUrl}/`, { method: "GET" }).catch(() => {});
       if (backendStatus === 'offline') setBackendStatus('online');
       return true;
@@ -76,7 +84,6 @@ export default function Home() {
     }
   };
 
-  // Focus management wrapper
   const focusInput = useCallback(() => {
     setTimeout(() => {
       inputRef.current?.focus();
@@ -99,15 +106,8 @@ export default function Home() {
   }, [focusInput, showToast, sessionId]);
 
   const sendMessage = useCallback(async (textToSend: string) => {
-    if (!textToSend) {
-      console.warn("sendMessage blocked: empty textToSend");
-      return;
-    }
-    if (botState !== 'idle') {
-      console.warn("sendMessage blocked: botState is not idle, it is", botState);
-      return;
-    }
-    console.log("Sending message:", textToSend);
+    if (!textToSend) return;
+    if (botState !== 'idle') return;
 
     const userMessage: MessageProps = {
       id: Date.now().toString(),
@@ -125,7 +125,6 @@ export default function Home() {
     const startTime = Date.now();
 
     try {
-      // Simulate delivered status (removed delay for instant response)
       setTimeout(() => {
         setMessages((prev) => 
           prev.map(m => m.id === userMessage.id ? { ...m, status: "delivered" } : m)
@@ -133,7 +132,6 @@ export default function Home() {
       }, 0);
 
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      
       const backendReady = await ensureBackend();
       if (!backendReady) throw new Error("Backend not available after waiting");
 
@@ -151,11 +149,8 @@ export default function Home() {
       const endTime = Date.now();
       setResponseTimes(prev => [...prev, endTime - startTime]);
 
-      // Switch to typing state (removed delay for instant response)
       setBotState('typing');
-      const typingDelay = 0;
 
-      // Simulate read status
       setMessages((prev) => 
         prev.map(m => m.id === userMessage.id ? { ...m, status: "read" } : m)
       );
@@ -190,7 +185,7 @@ export default function Home() {
         setMessages((prev) => [...prev, botMessage]);
         setBotState('idle');
         focusInput();
-      }, typingDelay);
+      }, 0);
 
     } catch (error) {
       console.error(error);
@@ -214,7 +209,6 @@ export default function Home() {
   const sendActionMessage = useCallback(async (actionType: string, payload: any) => {
     if (botState !== 'idle') return;
     
-    // For quick replies, just send the text normally
     if (actionType === 'send_message' && payload.text) {
       return sendMessage(payload.text);
     }
@@ -234,7 +228,6 @@ export default function Home() {
     
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      
       const backendReady = await ensureBackend();
       if (!backendReady) throw new Error("Backend not available after waiting");
 
@@ -285,7 +278,6 @@ export default function Home() {
   }, [botState, sendMessage, sessionId, conversationId, focusInput, showToast]);
 
   const handleSuggestionClick = useCallback((suggestion: string) => {
-    console.log("handleSuggestionClick triggered with:", suggestion);
     sendMessage(suggestion);
   }, [sendMessage]);
 
@@ -298,71 +290,170 @@ export default function Home() {
   }, [input, sendMessage]);
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-0 sm:p-4 bg-gradient-to-br from-blue-50/50 via-slate-50 to-blue-50/80 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 bg-[length:200%_200%] animate-gradient-xy">
-      {/* Abstract Background pattern */}
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03] dark:opacity-[0.01] pointer-events-none mix-blend-multiply dark:mix-blend-screen"></div>
+    <main className="min-h-screen w-full relative bg-black overflow-hidden font-sans text-white selection:bg-blue-500/30 flex flex-col">
       
-      <div className="w-full max-w-2xl h-[100dvh] sm:h-[calc(100vh-32px)] sm:max-h-[800px] flex flex-col bg-[var(--color-cards)]/80 dark:bg-[var(--color-cards)]/60 backdrop-blur-xl sm:rounded-2xl border-0 sm:border border-[var(--color-border)] shadow-[0_8px_40px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.2)] relative overflow-hidden z-10 sm:ring-1 ring-[var(--color-border)]/50 transition-colors duration-300">
-        
-        <ChatHeader 
-          status={backendStatus} 
-          model="Python API" 
-          latency={Math.round(avgResponseTime * 1000) || 0.01} 
-          onRefreshClick={() => setIsRefreshDialogOpen(true)}
+      {/* Background Globe Image */}
+      <div className="absolute top-0 right-[-10%] w-[70%] h-full z-0 opacity-80 pointer-events-none mix-blend-screen overflow-hidden">
+        <img 
+          src="/globe.png" 
+          alt="Globe Network" 
+          className="w-full h-full object-cover object-left" 
         />
-        
-        <ChatBody 
-          messages={messages} 
-          botState={botState} 
-          onSuggestionClick={handleSuggestionClick}
-          onReplayMessage={(id) => {
-            setSelectedTraceMessageId(id);
-            setIsDevModeOpen(true);
-          }}
-          onAction={sendActionMessage}
-        />
-        
-        <InputArea 
-          ref={inputRef}
-          input={input} 
-          setInput={setInput} 
-          handleSend={handleSend} 
-          isLoading={botState !== 'idle'} 
-          onSuggestionClick={handleSuggestionClick}
-        />
-        
-        <RefreshDialog 
-          isOpen={isRefreshDialogOpen} 
-          onConfirmClearChat={() => {
-            handleClearChat();
-          }} 
-          onConfirmClearBoth={() => {
-            MemoryService.clearMemory();
-            handleClearChat();
-          }}
-          onCancel={() => {
-            setIsRefreshDialogOpen(false);
-            focusInput();
-          }} 
-        />
-        
-        <Toast 
-          message={toastMessage} 
-          isVisible={!!toastMessage} 
-          onClose={() => setToastMessage("")} 
-        />
+        {/* Shadow overlay to fade left edge of image smoothly into background */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-transparent z-10" />
       </div>
 
-      {/* Floating Developer Mode Button */}
-      <button 
-        onClick={() => setIsDevModeOpen(true)}
-        className="fixed right-0 top-1/2 -translate-y-1/2 bg-slate-900 text-slate-300 hover:text-white p-3 py-4 rounded-l-xl shadow-lg border border-r-0 border-slate-700/50 flex flex-col items-center gap-2 transition-all hover:bg-slate-800 z-40 group"
-      >
-        <Bug size={18} className="text-emerald-500 group-hover:animate-pulse" />
-        <span className="text-[10px] uppercase font-bold tracking-widest" style={{ writingMode: 'vertical-rl' }}>Dev Mode</span>
-      </button>
+      {/* Top Header */}
+      <header className="w-full flex items-center justify-between px-6 lg:px-12 py-6 relative z-20 border-b border-white/10 bg-black/50 backdrop-blur-sm">
+        <div className="text-2xl font-bold tracking-tight">Mobiloitte</div>
+        
+        <nav className="hidden lg:flex items-center gap-8 font-semibold text-[15px]">
+          <a href="#" className="flex items-center gap-1 hover:text-gray-300">What we do <ChevronDown size={14} /></a>
+          <a href="#" className="flex items-center gap-1 hover:text-gray-300">What we think <ChevronDown size={14} /></a>
+          <a href="#" className="flex items-center gap-1 hover:text-gray-300">Who we are <ChevronDown size={14} /></a>
+          <a href="#" className="hover:text-gray-300">Careers</a>
+        </nav>
+        
+        <button className="hidden md:block px-6 py-2 rounded-full border border-white font-semibold hover:bg-white hover:text-black transition-colors">
+          Contact Us
+        </button>
+      </header>
+      
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col justify-center px-6 lg:px-12 xl:px-24 relative z-10 w-full lg:w-[60%]">
+        
+        {/* Heading */}
+        <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold tracking-tight text-white mb-6 leading-tight">
+          RAG Based <br/>
+          AI Architectures and Enterprise Integrations
+        </h1>
+        
+        {/* Description */}
+        <p className="text-[15px] md:text-[16px] text-white/90 max-w-[650px] mb-8 leading-relaxed font-medium">
+          Mobiloitte builds secure AI systems, custom AI software, generative AI solutions, RAG architectures, 
+          AI agents, blockchain platforms, cloud infrastructure, cybersecurity solutions, web applications, AI-powered 
+          mobile apps, and automation workflows for enterprise digital transformation. From AI consulting and workflow 
+          design to development, integration, deployment, governance, and scale, Mobiloitte helps businesses launch 
+          production-ready AI solutions, enterprise software platforms, cloud-native applications, blockchain systems, 
+          and intelligent automation workflows.
+        </p>
+        
+        {/* CTAs */}
+        <div className="flex flex-wrap items-center gap-4 mb-8">
+          <button 
+            className="px-6 py-3.5 bg-[#0B66D9] hover:bg-blue-600 text-white rounded-lg font-bold flex items-center gap-2 transition-all text-sm shadow-[0_4px_14px_rgba(11,102,217,0.4)]"
+          >
+            Book an AI Strategy Session <ArrowRight size={18} />
+          </button>
+          <button className="px-6 py-3.5 bg-black hover:bg-white/5 text-white rounded-lg font-bold border border-white/30 transition-all text-sm">
+            See What We Build
+          </button>
+        </div>
+      </div>
+      
+      {/* Footer Text */}
+      <div className="w-full px-6 lg:px-12 xl:px-24 pb-8 relative z-10 max-w-[85%] lg:max-w-[70%]">
+        <p className="text-[13px] md:text-[14px] text-white/80 leading-relaxed font-semibold">
+          From AI strategy to generative AI development, RAG chatbot development, LLM integration, AI agent development, enterprise software engineering, mobile app development, cloud, DevOps, cybersecurity, and blockchain deployment.
+        </p>
+      </div>
 
-      {/* Developer Sidebar */}
+      {/* Floating Pill Launcher */}
+      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 lg:bottom-10 lg:right-10 z-40 group cursor-pointer" onClick={() => setIsChatOpen(!isChatOpen)}>
+        <div className={`absolute inset-0 bg-blue-500 rounded-full blur-xl transition-all duration-500 ${isChatOpen ? 'opacity-0' : 'opacity-40 group-hover:opacity-60 animate-glow-pulse'}`} />
+        
+        <div className={`relative h-[56px] flex items-center rounded-full bg-white shadow-2xl transition-all duration-300 transform ${isChatOpen ? 'scale-90 opacity-0 pointer-events-none' : 'scale-100 opacity-100 hover:scale-105'} pr-[4px] pl-5 overflow-hidden`}>
+          <span className="text-black font-bold text-[13px] sm:text-[14px] mr-3 whitespace-nowrap">Start your Digital Journey...</span>
+          <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center text-white relative">
+            {/* Custom M logo mimicking the screenshot */}
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-blue-700 to-blue-500 shadow-inner" />
+            <div className="absolute inset-0 rounded-full border-[3px] border-white/20" />
+            <span className="relative z-10 font-bold text-2xl italic tracking-tighter" style={{ fontFamily: 'Georgia, serif' }}>M</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating Chat Widget */}
+      <AnimatePresence>
+        {isChatOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.95 }}
+            transition={{ duration: 0.4, type: "spring", bounce: 0.15 }}
+            className={cn(
+              "fixed bg-white dark:bg-slate-900 premium-shadow border border-white/20 dark:border-slate-800 overflow-hidden flex flex-col z-50 backdrop-blur-2xl transition-all duration-500",
+              isChatExpanded 
+                ? "inset-0 w-full h-full rounded-none" 
+                : "top-1/2 -translate-y-1/2 right-4 sm:right-6 lg:right-10 w-[calc(100vw-32px)] sm:w-[350px] md:w-[380px] xl:w-[420px] h-[85vh] max-h-[750px] rounded-[24px]"
+            )}
+          >
+            <ChatHeader 
+              status={backendStatus} 
+              model="v2.4.1" 
+              latency={Math.round(avgResponseTime * 1000) || 0.01} 
+              isExpanded={isChatExpanded}
+              onExpandClick={() => setIsChatExpanded(!isChatExpanded)}
+              onRefreshClick={() => setIsRefreshDialogOpen(true)}
+              onClose={() => setIsChatOpen(false)}
+            />
+            
+            <ChatBody 
+              messages={messages} 
+              botState={botState} 
+              onSuggestionClick={handleSuggestionClick}
+              onReplayMessage={(id) => {
+                setSelectedTraceMessageId(id);
+                setIsDevModeOpen(true);
+              }}
+              onAction={sendActionMessage}
+            />
+            
+            <InputArea 
+              ref={inputRef}
+              input={input} 
+              setInput={setInput} 
+              handleSend={handleSend} 
+              isLoading={botState !== 'idle'} 
+              onSuggestionClick={handleSuggestionClick}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Dialogs and Toasts outside the main widget to avoid clipping */}
+      <RefreshDialog 
+        isOpen={isRefreshDialogOpen} 
+        onConfirmClearChat={async () => {
+          await handleClearChat();
+        }} 
+        onConfirmClearBoth={async () => {
+          await MemoryService.clearMemory();
+          await handleClearChat();
+        }}
+        onCancel={() => {
+          setIsRefreshDialogOpen(false);
+          focusInput();
+        }} 
+      />
+      
+      <Toast 
+        message={toastMessage} 
+        isVisible={!!toastMessage} 
+        onClose={() => setToastMessage("")} 
+      />
+
+      {/* Floating Developer Mode Button */}
+      <div className="fixed left-0 top-1/2 -translate-y-1/2 z-40">
+        <button 
+          onClick={() => setIsDevModeOpen(true)}
+          className="glass-panel text-slate-400 hover:text-white p-2 py-5 rounded-r-xl shadow-[10px_0_30px_rgba(0,0,0,0.2)] flex flex-col items-center gap-3 transition-all hover:bg-white/10 group bg-white/5 border border-white/10"
+        >
+          <Bug size={16} className="text-blue-400 group-hover:animate-pulse" />
+          <span className="text-[10px] uppercase font-bold tracking-widest opacity-80" style={{ writingMode: 'vertical-rl' }}>Dev Mode</span>
+        </button>
+      </div>
+
       <DeveloperSidebar 
         isOpen={isDevModeOpen}
         onClose={() => setIsDevModeOpen(false)}
@@ -372,3 +463,4 @@ export default function Home() {
     </main>
   );
 }
+
