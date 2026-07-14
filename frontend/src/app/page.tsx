@@ -9,6 +9,7 @@ import { MessageProps } from "@/components/chat/ChatMessage";
 import { RefreshDialog } from "@/components/chat/RefreshDialog";
 import { Toast } from "@/components/chat/Toast";
 import { DeveloperSidebar } from "@/components/dev/DeveloperSidebar";
+import { MemoryService } from "@/services/MemoryService";
 
 export default function Home() {
   const [sessionId] = useState(() => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
@@ -142,7 +143,8 @@ export default function Home() {
         body: JSON.stringify({ 
           message: textToSend,
           session_id: sessionId,
-          conversation_id: conversationId
+          conversation_id: conversationId,
+          metadata: { memory: MemoryService.loadMemory() }
         }),
       });
       
@@ -164,6 +166,14 @@ export default function Home() {
       }
 
       const data = await response.json();
+      
+      if (data.actions) {
+        data.actions.forEach((action: any) => {
+          if (action.type === 'UPDATE_MEMORY') {
+            MemoryService.updateMemory(action.payload);
+          }
+        });
+      }
       
       setTimeout(() => {
         const botMessage: MessageProps = {
@@ -235,7 +245,7 @@ export default function Home() {
           message: textToSend,
           session_id: sessionId,
           conversation_id: conversationId,
-          metadata: { action: payload.action, data: payload.data }
+          metadata: { action: payload.action, data: payload.data, memory: MemoryService.loadMemory() }
         }),
       });
       
@@ -243,6 +253,14 @@ export default function Home() {
 
       if (!response.ok) throw new Error("Failed to connect to the server");
       const data = await response.json();
+      
+      if (data.actions) {
+        data.actions.forEach((action: any) => {
+          if (action.type === 'UPDATE_MEMORY') {
+            MemoryService.updateMemory(action.payload);
+          }
+        });
+      }
       
       const botMessage: MessageProps = {
         id: Date.now().toString(),
@@ -315,7 +333,13 @@ export default function Home() {
         
         <RefreshDialog 
           isOpen={isRefreshDialogOpen} 
-          onConfirm={handleClearChat} 
+          onConfirmClearChat={() => {
+            handleClearChat();
+          }} 
+          onConfirmClearBoth={() => {
+            MemoryService.clearMemory();
+            handleClearChat();
+          }}
           onCancel={() => {
             setIsRefreshDialogOpen(false);
             focusInput();

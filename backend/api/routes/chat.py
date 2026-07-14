@@ -7,6 +7,7 @@ from pipeline.pipeline_context import PipelineContext
 
 from steps.normalize_step import NormalizeStep
 from steps.conversation_opener_step import ConversationOpenerStep
+from steps.session_memory_step import SessionMemoryStep
 from steps.meaningful_validator_step import MeaningfulValidatorStep
 from steps.gibberish_step import GibberishStep
 from steps.farewell_step import FarewellStep
@@ -16,14 +17,17 @@ from steps.response_formatter_step import ResponseFormatterStep
 from steps.faq_step import FAQStep
 from steps.llm_step import LLMStep
 from steps.fallback_step import FallbackStep
+from steps.semantic_cache_step import SemanticCacheStep
 
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
 pipeline_runner.register_step("ConversationOpener", ConversationOpenerStep())
+pipeline_runner.register_step("SessionMemory", SessionMemoryStep())
 pipeline_runner.register_step("Farewell", FarewellStep())
 pipeline_runner.register_step("MeaningfulValidator", MeaningfulValidatorStep())
 pipeline_runner.register_step("FastPathRouter", FastPathRouterStep())
 pipeline_runner.register_step("FAQ", FAQStep())
+pipeline_runner.register_step("SemanticCache", SemanticCacheStep())
 pipeline_runner.register_step("KnowledgeSearch", KnowledgeSearchStep())
 pipeline_runner.register_step("ResponseFormatter", ResponseFormatterStep())
 pipeline_runner.register_step("LLM", LLMStep())

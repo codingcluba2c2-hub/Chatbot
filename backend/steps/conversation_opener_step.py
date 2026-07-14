@@ -39,16 +39,16 @@ class ConversationOpenerStep(PipelineStep):
     def process(self, context: PipelineContext) -> PipelineResult:
         text = context.normalized_message.strip()
         
-        # Regex to detect common greetings, including repeated characters (e.g. hiiii, helloooo)
+        # Regex to detect common greetings, including repeated characters and multiple greetings (e.g. hello good morning)
         pattern = re.compile(
-            r'\b(h+i+|h+e+l+o+|h+e+y+|n+a+m+a+s+t+e+|s+a+l+a+m+|g+o+o+d+\s+m+o+r+n+i+n+g+|g+o+o+d+\s+e+v+e+n+i+n+g+|g+o+o+d+\s+a+f+t+e+r+n+o+o+n+)\b',
+            r'^(?:[^a-z0-9]*\b(?:h+i+|h+e+l+o+|h+e+y+|n+a+m+a+s+t+e+|s+a+l+a+m+|g+o+o+d+\s+m+o+r+n+i+n+g+|g+o+o+d+\s+e+v+e+n+i+n+g+|g+o+o+d+\s+a+f+t+e+r+n+o+o+n+)\b[^a-z0-9]*)+',
             re.IGNORECASE
         )
         
-        match = pattern.search(text)
+        match = pattern.match(text)
         
         if match:
-            detected_raw = match.group(1)
+            detected_raw = match.group(0).strip()
             base_opener = self._get_base_opener(detected_raw)
             
             context.metadata["greeting_detected"] = True
@@ -64,31 +64,34 @@ class ConversationOpenerStep(PipelineStep):
             context.metadata["greeting_prefix"] = prefix
             
             # Remove the detected greeting from the text
-            remaining_query = pattern.sub('', text, count=1).strip()
+            remaining_query = text[match.end():].strip()
             
             context.metadata["remaining_query"] = remaining_query
             
             if not remaining_query:
-                # The user just said "hello"
-                final_response = ResponseService.get_sequential_response(
-                    context.session_id, 
-                    f"greeting_{base_opener.lower()}", 
-                    f"{prefix} How can I assist you today?"
-                )
-                
                 context.metadata["routing"] = "Greeting (Empty remaining query)"
-                
-                return PipelineResult(
-                    stop=True,
-                    intent=INTENT_GREETING,
-                    response=final_response
-                )
+                # Pass to next steps
+                return PipelineResult(continue_pipeline=True)
             else:
-                # The user said something like "hi company name" or "dfhkdjf hi kldjfd"
-                context.normalized_message = remaining_query
-                context.metadata["routing"] = "Greeting + Multi-Intent"
+                from utils.detectors import detect_fastpath, detect_faq, validate_query
+                fp, _, _, _ = detect_fastpath(remaining_query)
+                is_faq, _, _, _ = detect_faq(remaining_query)
                 
-                # We continue the pipeline
+                if fp or is_faq:
+                    context.normalized_message = remaining_query
+                    context.metadata["routing"] = "Greeting + Known Intent"
+                    return PipelineResult(continue_pipeline=True)
+                    
+                validation = validate_query(remaining_query)
+                if validation.get("isMeaningful"):
+                    context.normalized_message = remaining_query
+                    context.metadata["routing"] = "Greeting + Meaningful Query"
+                    return PipelineResult(continue_pipeline=True)
+                    
+                # The user said something like "hi raj" or "hello akhlaque" which is not in dictionary
+                # Pass it down the pipeline for SessionMemoryStep to handle
+                context.normalized_message = remaining_query
+                context.metadata["routing"] = "Greeting + Name"
                 return PipelineResult(continue_pipeline=True)
                 
         else:

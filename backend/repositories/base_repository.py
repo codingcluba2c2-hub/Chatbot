@@ -24,6 +24,11 @@ class BaseRepository(Generic[T, D]):
             obj_dict[col_name] = getattr(db_obj, attr_name)
         return self.model(**obj_dict)
 
+    def _invalidate_cache(self):
+        if hasattr(self, "_cache"):
+            self._cache.clear()
+            self._cache_times.clear()
+
     def get_all(self, skip: int = 0, limit: int = 100, sort_by: str = "created_at", descending: bool = True, query: str = None) -> List[T]:
         if not self.db_model:
             return []
@@ -62,7 +67,7 @@ class BaseRepository(Generic[T, D]):
             stmt = stmt.offset(skip).limit(limit)
             db_items = stmt.all()
             
-            results = [self._to_pydantic(item) for item in db_items]
+            results = [self._to_pydantic(item) for item in db_items if item is not None]
             
             self._cache[cache_key] = results
             self._cache_times[cache_key] = now
@@ -91,6 +96,7 @@ class BaseRepository(Generic[T, D]):
             session.add(db_obj)
             session.commit()
             session.refresh(db_obj)
+            self._invalidate_cache()
             return self._to_pydantic(db_obj)
         
     def update(self, item_id: str, update_data: BaseModel) -> Optional[T]:
@@ -112,6 +118,7 @@ class BaseRepository(Generic[T, D]):
                 
             session.commit()
             session.refresh(db_obj)
+            self._invalidate_cache()
             return self._to_pydantic(db_obj)
         
     def delete(self, item_id: str) -> bool:
@@ -123,6 +130,7 @@ class BaseRepository(Generic[T, D]):
             if db_obj:
                 session.delete(db_obj)
                 session.commit()
+                self._invalidate_cache()
                 return True
             return False
 
