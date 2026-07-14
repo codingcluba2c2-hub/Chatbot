@@ -62,7 +62,7 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
               "text-[0.65rem] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border shadow-sm",
               getIntentColor(intent)
             )}>
-              {intent}
+              {intent.toLowerCase() === 'knowledge' ? 'RAG' : intent}
             </span>
           </div>
         )}

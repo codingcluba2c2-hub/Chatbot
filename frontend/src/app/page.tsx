@@ -28,7 +28,7 @@ export default function Home() {
   const inputRef = useRef<InputAreaRef>(null);
 
   const avgResponseTime = responseTimes.length > 0 
-    ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length / 1000 
+    ? responseTimes[responseTimes.length - 1] / 1000 
     : 0;
 
   const showToast = useCallback((msg: string) => {
@@ -53,29 +53,27 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  // Connection Monitoring
-  useEffect(() => {
+  const ensureBackend = async () => {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    
-    const checkConnection = async () => {
-      try {
-        // Just pinging root or any simple endpoint if it existed, 
-        // since we only have /chat we might just assume it's online unless a fetch fails.
-        // Or we can do a simple GET to backendUrl (if it has a health route).
-        // For now, let's do a simple GET and ignore 404/405 as long as we get a response.
-        await fetch(`${backendUrl}/`, { method: "GET" }).catch(() => {});
-        if (backendStatus === 'offline') setBackendStatus('online');
-      } catch (err) {
-        if (backendStatus === 'online') {
-          setBackendStatus('offline');
-          showToast("Unable to reach backend.");
+    try {
+      // Don't spam console if possible, but fetch native will log. We catch to prevent throw.
+      await fetch(`${backendUrl}/`, { method: "GET" }).catch(() => {});
+      if (backendStatus === 'offline') setBackendStatus('online');
+      return true;
+    } catch (err) {
+      setBackendStatus('offline');
+      showToast("Backend Starting... Retrying in 5 seconds.");
+      return new Promise((resolve) => setTimeout(async () => {
+        try {
+          await fetch(`${backendUrl}/`, { method: "GET" }).catch(() => {});
+          if (backendStatus === 'offline') setBackendStatus('online');
+          resolve(true);
+        } catch(e) {
+          resolve(false);
         }
-      }
-    };
-    
-    const interval = setInterval(checkConnection, 5000);
-    return () => clearInterval(interval);
-  }, [backendStatus, showToast]);
+      }, 5000));
+    }
+  };
 
   // Focus management wrapper
   const focusInput = useCallback(() => {
@@ -134,6 +132,10 @@ export default function Home() {
       }, 0);
 
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      
+      const backendReady = await ensureBackend();
+      if (!backendReady) throw new Error("Backend not available after waiting");
+
       const response = await fetch(`${backendUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -157,7 +159,8 @@ export default function Home() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to connect to the server");
+        const errorText = await response.text().catch(() => 'no text');
+        throw new Error(`Server returned ${response.status} ${response.statusText}: ${errorText}`);
       }
 
       const data = await response.json();
@@ -221,6 +224,10 @@ export default function Home() {
     
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      
+      const backendReady = await ensureBackend();
+      if (!backendReady) throw new Error("Backend not available after waiting");
+
       const response = await fetch(`${backendUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

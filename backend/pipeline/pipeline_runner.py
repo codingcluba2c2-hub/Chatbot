@@ -47,12 +47,17 @@ class PipelineRunner:
                 if result.stop:
                     decision = "Stop"
             except Exception as e:
+                import traceback
                 logger.error(f"Error in step '{step_name}': {e}")
-                status = "failed"
-                decision = "Failed"
-                # To maintain safety, we create a dummy result on failure
-                from pipeline.pipeline_result import PipelineResult
-                result = PipelineResult(continue_pipeline=False, stop=True)
+                logger.error(traceback.format_exc())
+                return {
+                    "success": False,
+                    "step": step_name,
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                    "developer_message": f"Step '{step_name}' crashed during execution.",
+                    "user_message": "Internal server error."
+                }
                 
             t1 = time.perf_counter()
             end_timestamp = time.time()
@@ -100,33 +105,16 @@ class PipelineRunner:
         if DEVELOPER_MODE:
             trace = {
                 "steps": trace_steps,
-                "totalBackendTimeMs": round(total_time, 3)
+                "totalBackendTimeMs": round(total_time, 3),
+                "metadata": dict(context.metadata)
             }
         
-        # Save to memory (import locally to avoid circular dependency if any)
-        from services.conversation_memory_service import ConversationMemoryService
-        from services.summary_service import SummaryService
-        
-        ConversationMemoryService.add_message(
-            session_id=context.session_id,
-            role="user",
-            content=context.original_message,
-            intent=final_intent,
-            conversation_id=context.conversation_id
-        )
-        
-        ConversationMemoryService.add_message(
-            session_id=context.session_id,
-            role="bot",
-            content=final_response,
-            intent=final_intent,
-            trace=trace,
-            conversation_id=context.conversation_id
-        )
-        
-        SummaryService.generate_summary(context.session_id)
+        # Handle greeting prefix if it was a multi-intent query
+        if "greeting_prefix" in context.metadata and final_intent != "Greeting":
+            final_response = f"{context.metadata['greeting_prefix']} {final_response}"
         
         response_obj = {
+            "success": True,
             "intent": final_intent,
             "response": final_response,
             "components": locals().get('final_components', []),

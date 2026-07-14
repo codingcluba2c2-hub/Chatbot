@@ -6,17 +6,22 @@ from core.config import EMBEDDING_MODEL
 logger = get_logger(__name__)
 
 class SentenceTransformerProvider(BaseEmbeddingProvider):
+    _cached_model = None
+
     def __init__(self, model_name: str = None):
         self.model_name = model_name or EMBEDDING_MODEL
         self._dimension = 384
         try:
             from sentence_transformers import SentenceTransformer
-            logger.info(f"Loading embedding model {self.model_name}...")
-            self.model = SentenceTransformer(self.model_name)
+            if SentenceTransformerProvider._cached_model is None:
+                logger.info(f"Loading embedding model {self.model_name}...")
+                SentenceTransformerProvider._cached_model = SentenceTransformer(self.model_name)
+                logger.info("Embedding model loaded successfully.")
+            
+            self.model = SentenceTransformerProvider._cached_model
             # Override dimension if possible
             if hasattr(self.model, 'get_sentence_embedding_dimension'):
                 self._dimension = self.model.get_sentence_embedding_dimension()
-            logger.info(f"Loaded embedding model {self.model_name} (dim: {self._dimension})")
         except ImportError:
             logger.error("sentence-transformers not installed. Please install it to use SentenceTransformerProvider.")
             self.model = None

@@ -70,8 +70,6 @@ export const KnowledgeBaseModule = () => {
 
   useEffect(() => {
     fetchDocuments();
-    const interval = setInterval(fetchDocuments, 10000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -3,12 +3,16 @@
 
 # FastAPI is the web framework we use to build the backend server
 fastapi
+python-multipart
 
 # Uvicorn is the actual web server program that runs the FastAPI code
 uvicorn
 
 # Pydantic is used by FastAPI to make sure the data we receive and send is formatted correctly
 pydantic
+
+# python-dotenv is used to load environment variables from .env files
+python-dotenv
 
 # Database ORM and PostgreSQL adapter
 sqlalchemy
@@ -18,4 +22,4 @@ psycopg2-binary
 PyPDF2
 python-docx
 qdrant-client
-sentence-transformers
+google-genai

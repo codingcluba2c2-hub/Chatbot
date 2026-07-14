@@ -17,18 +17,14 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 # Order of pipeline steps to execute
 PIPELINE_STEPS: List[str] = [
     "Normalize",
-    "Gibberish",
-    "SpellCorrection",
-    "Alias",
-    "Regex",
-    "Greeting",
+    "ConversationOpener",
     "Farewell",
-    "FastPath",
+    "MeaningfulValidator",
+    "FastPathRouter",
     "FAQ",
-    "Intent",
-    "ToolRouter",
-    "Memory",
-    "RAG",
+    "KnowledgeSearch",
+    "ResponseFormatter",
     "LLM",
-    "Response"
+    "Fallback",
+    "Gibberish"
 ]

@@ -28,6 +28,16 @@ class BaseRepository(Generic[T, D]):
         if not self.db_model:
             return []
             
+        cache_key = f"get_all_{skip}_{limit}_{sort_by}_{descending}_{query}"
+        
+        if not hasattr(self, "_cache"):
+            self._cache = {}
+            self._cache_times = {}
+            
+        now = time.time()
+        if cache_key in self._cache and (now - self._cache_times.get(cache_key, 0)) < 3600:
+            return self._cache[cache_key]
+            
         with SessionLocal() as session:
             stmt = session.query(self.db_model)
             
@@ -51,7 +61,13 @@ class BaseRepository(Generic[T, D]):
                     
             stmt = stmt.offset(skip).limit(limit)
             db_items = stmt.all()
-            return [self._to_pydantic(item) for item in db_items]
+            
+            results = [self._to_pydantic(item) for item in db_items]
+            
+            self._cache[cache_key] = results
+            self._cache_times[cache_key] = now
+            
+            return results
         
     def get_by_id(self, item_id: str) -> Optional[T]:
         if not self.db_model:

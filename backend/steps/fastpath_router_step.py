@@ -1,27 +1,25 @@
-# backend/steps/fastpath_step.py
 from steps.base_step import PipelineStep
 from pipeline.pipeline_context import PipelineContext
 from pipeline.pipeline_result import PipelineResult
 from utils.detectors import detect_fastpath
-from services.fastpath_service import FastPathService
-from services.response_service import ResponseService
 from core.constants import INTENT_FASTPATH
 
-class FastPathStep(PipelineStep):
+class FastPathRouterStep(PipelineStep):
     def process(self, context: PipelineContext) -> PipelineResult:
-        fastpath_key, phrase, conf, _ = detect_fastpath(context.normalized_message)
+        fastpath_key, phrase, conf, response = detect_fastpath(context.normalized_message)
         
         if fastpath_key:
-            raw_response = FastPathService.get_response(fastpath_key)
-            final_response = ResponseService.get_sequential_response(
-                context.session_id,
-                f"fastpath_{fastpath_key}",
-                raw_response
-            )
+            context.entities["intent"] = INTENT_FASTPATH
+            context.entities["routed_topic"] = fastpath_key
+            context.metadata["fastpath_routed"] = True
+            context.metadata["fastpath_key"] = fastpath_key
+            
+            # Stop the pipeline and return the exact configured response
             return PipelineResult(
+                continue_pipeline=False,
                 stop=True,
                 intent=INTENT_FASTPATH,
-                response=final_response,
+                response=response,
                 metadata={"matched_key": fastpath_key, "phrase": phrase, "confidence": conf}
             )
             

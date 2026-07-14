@@ -12,7 +12,7 @@ interface DeveloperSidebarProps {
 }
 
 export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onClose, messages, selectedMessageId }) => {
-  const [activeTab, setActiveTab] = useState<'timeline' | 'network' | 'performance' | 'pipeline' | 'memory' | 'logs'>('pipeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'network' | 'performance' | 'pipeline' | 'memory' | 'logs' | 'routing'>('pipeline');
 
   // Find the selected message trace, or default to the latest bot message
   let selectedMessage = messages.find(m => m.id === selectedMessageId);
@@ -37,6 +37,7 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
 
   const tabs = [
     { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
+    { id: 'routing', label: 'Routing', icon: Layers },
     { id: 'network', label: 'Network', icon: Network },
     { id: 'timeline', label: 'Timeline', icon: Activity },
     { id: 'memory', label: 'Memory', icon: Database },
@@ -118,7 +119,7 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                       </pre>
                       <div className="mt-4 text-slate-400 uppercase tracking-widest text-[10px]">Response Payload</div>
                       <pre className="text-emerald-300 mt-1 bg-slate-950 p-2 rounded">
-                        {JSON.stringify({ intent: botMessage.intent, response: botMessage.content }, null, 2)}
+                        {JSON.stringify({ intent: botMessage?.intent, response: botMessage?.content }, null, 2)}
                       </pre>
                     </div>
                   </div>
@@ -174,6 +175,132 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                         <span className="text-slate-500">({s.duration}ms)</span>
                       </div>
                     ))}
+                  </div>
+                )}
+                {activeTab === 'routing' && (
+                  <div className="font-mono text-xs p-3 rounded-md bg-slate-900 border border-slate-800 space-y-4">
+                    <div className="text-slate-400 uppercase tracking-widest text-[10px] mb-2 border-b border-slate-800 pb-2">Enterprise Routing Decision</div>
+                    
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <span className="text-slate-500 block mb-1">User Query:</span>
+                        <span className="text-blue-300 font-bold bg-slate-950 p-2 rounded block">{selectedMessage?.content || "N/A"}</span>
+                      </div>
+                      
+                      <div className="text-center text-slate-600">↓</div>
+                      
+                      <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
+                        <span className="text-slate-300">Normalize</span>
+                        <span className="text-emerald-400 font-bold">✅</span>
+                      </div>
+                      
+                      {trace.metadata?.greeting_detected !== undefined && (
+                        <>
+                          <div className="text-center text-slate-600">↓</div>
+                          <div className="flex flex-col gap-2 bg-slate-800/50 p-3 rounded border border-slate-700/50">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-300 font-semibold text-xs">Greeting Detected:</span>
+                              <span className={trace.metadata?.greeting_detected ? "text-emerald-400 font-bold" : "text-slate-500 font-bold"}>
+                                {trace.metadata?.greeting_detected ? "true" : "false"}
+                              </span>
+                            </div>
+                            
+                            {trace.metadata?.greeting_detected && (
+                              <>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-slate-400 text-[11px]">Greeting Token:</span>
+                                  <span className="text-amber-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">"{trace.metadata.greeting_token}"</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-slate-400 text-[11px]">Remaining Query:</span>
+                                  <span className="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">"{trace.metadata.remaining_query}"</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-slate-400 text-[11px]">Routing:</span>
+                                  <span className="text-purple-400 text-[11px] font-semibold">{trace.metadata.routing}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      
+                      <div className="text-center text-slate-600">↓</div>
+                      
+                      <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
+                        <span className="text-slate-300">Business Keyword Match:</span>
+                        <span className={trace.metadata?.business_keyword_match === "YES" ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                          {trace.metadata?.business_keyword_match || "NO"}
+                        </span>
+                      </div>
+                      
+                      <div className="text-center text-slate-600">↓</div>
+                      
+                      <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
+                        <span className="text-slate-300">Meaningful Score:</span>
+                        <span className={parseFloat(trace.metadata?.meaningful_score || "0") < 60 && trace.metadata?.business_keyword_match !== "YES" ? "text-red-400 font-bold" : "text-emerald-400 font-bold"}>
+                          {trace.metadata?.meaningful_score || "N/A"}
+                        </span>
+                      </div>
+                      
+                      <div className="text-center text-slate-600">↓</div>
+                      
+                      <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
+                        <span className="text-slate-300">Knowledge Search:</span>
+                        <span className={trace.metadata?.knowledge_search_decision?.startsWith("REJECTED") ? "text-amber-400 font-bold" : (trace.metadata?.knowledge_search_decision === "EXECUTED" ? "text-emerald-400 font-bold" : "text-slate-500 font-bold")}>
+                          {trace.metadata?.knowledge_search_decision || "SKIPPED"}
+                        </span>
+                      </div>
+                      
+                      {trace.metadata?.top_score && (
+                        <>
+                          <div className="text-center text-slate-600">↓</div>
+                          <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
+                            <span className="text-slate-300">Top RAG Score:</span>
+                            <span className="text-blue-400 font-bold">{trace.metadata.top_score.toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
+                      
+                      {trace.metadata?.response_formatter_used && (
+                        <>
+                          <div className="text-center text-slate-600">↓</div>
+                          <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
+                            <span className="text-slate-300">Formatter Used:</span>
+                            <span className="text-emerald-400 font-bold">TRUE</span>
+                          </div>
+                        </>
+                      )}
+                      
+                      {(trace.metadata?.gemini_used || trace.metadata?.fallback_used) && (
+                        <>
+                          <div className="text-center text-slate-600">↓</div>
+                          <div className="flex flex-col gap-2 bg-slate-800/50 p-3 rounded border border-slate-700/50">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-300 font-semibold text-xs">LLM Engine:</span>
+                              <span className={trace.metadata?.gemini_used ? "text-purple-400 font-bold" : "text-amber-400 font-bold"}>
+                                {trace.metadata?.gemini_used ? "Gemini 1.5" : "Deterministic Fallback"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-400 text-[11px]">Generation Latency:</span>
+                              <span className="text-slate-300 text-[11px] font-mono">{trace.metadata.llm_latency_ms}ms</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-400 text-[11px]">Final Output Length:</span>
+                              <span className="text-slate-300 text-[11px] font-mono">{botMessage?.content?.length || 0} chars</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      
+                      <div className="text-center text-slate-600">↓</div>
+                      
+                      <div className="bg-slate-950 p-3 rounded border border-slate-700/50">
+                        <span className="text-slate-500 block text-[10px] uppercase mb-1">Final Intent:</span>
+                        <span className="text-white font-bold text-sm tracking-wide">{botMessage?.intent || "UNKNOWN"}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

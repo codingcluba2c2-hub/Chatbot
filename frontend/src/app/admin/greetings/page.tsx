@@ -16,7 +16,7 @@ export default function GreetingsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["greetings", search],
     queryFn: async () => {
-      const url = new URL(apiUrl);
+      const url = apiUrl.startsWith("http") ? new URL(apiUrl) : new URL(apiUrl, window.location.origin);
       if (search) url.searchParams.append("query", search);
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch");

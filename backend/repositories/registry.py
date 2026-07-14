@@ -36,23 +36,46 @@ class ChunkRepository(BaseRepository[DocumentChunk, DocumentChunkDB]):
 class KnowledgeSettingsRepository(BaseRepository[KnowledgeSettings, KnowledgeSettingsDB]):
     pass
 
-# Global singletons
-audit_repo = AuditLogRepository(AuditLog, AuditLogDB)
-greeting_repo = GreetingRepository(Greeting, GreetingDB)
-farewell_repo = FarewellRepository(Farewell, FarewellDB)
-faq_repo = FAQRepository(FAQ, FAQDB)
-fastpath_repo = FastPathRepository(FastPath, FastPathDB)
-document_repo = DocumentRepository(KnowledgeDocument, KnowledgeDocumentDB)
-chunk_repo = ChunkRepository(DocumentChunk, DocumentChunkDB)
-settings_repo = KnowledgeSettingsRepository(KnowledgeSettings, KnowledgeSettingsDB)
+_instances = {}
 
-conversation_repo = ConversationRepository()
-message_repo = MessageRepository()
-fact_repo = FactRepository()
+def _get_repo(name: str):
+    if name not in _instances:
+        if name == "audit_repo":
+            _instances[name] = AuditLogRepository(AuditLog, AuditLogDB)
+        elif name == "greeting_repo":
+            _instances[name] = GreetingRepository(Greeting, GreetingDB)
+        elif name == "farewell_repo":
+            _instances[name] = FarewellRepository(Farewell, FarewellDB)
+        elif name == "faq_repo":
+            _instances[name] = FAQRepository(FAQ, FAQDB)
+        elif name == "fastpath_repo":
+            _instances[name] = FastPathRepository(FastPath, FastPathDB)
+        elif name == "document_repo":
+            _instances[name] = DocumentRepository(KnowledgeDocument, KnowledgeDocumentDB)
+        elif name == "chunk_repo":
+            _instances[name] = ChunkRepository(DocumentChunk, DocumentChunkDB)
+        elif name == "settings_repo":
+            _instances[name] = KnowledgeSettingsRepository(KnowledgeSettings, KnowledgeSettingsDB)
+        elif name == "conversation_repo":
+            _instances[name] = ConversationRepository()
+        elif name == "message_repo":
+            _instances[name] = MessageRepository()
+        elif name == "fact_repo":
+            _instances[name] = FactRepository()
+        else:
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return _instances[name]
+
+def __getattr__(name):
+    if name in ["audit_repo", "greeting_repo", "farewell_repo", "faq_repo", 
+                "fastpath_repo", "document_repo", "chunk_repo", "settings_repo", 
+                "conversation_repo", "message_repo", "fact_repo"]:
+        return _get_repo(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Function to record audit logs
 def log_audit(action: str, entity_type: str, entity_id: str, old_value=None, new_value=None, user: str = "system"):
-    audit_repo.create(AuditLog(
+    _get_repo("audit_repo").create(AuditLog(
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,

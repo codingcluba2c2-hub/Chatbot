@@ -14,9 +14,6 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
 UPLOAD_DIR = "uploads"
 
-# Initialize RAG dependencies
-vector_store = get_vector_store()
-embedding_provider = get_embedding_provider()
 
 def update_doc_status(doc_id: str, status: str, stats: dict = None, error: str = None, chunk_count: int = None):
     doc = document_repo.get_by_id(doc_id)
@@ -109,7 +106,7 @@ def process_document_bg(doc_id: str, file_path: str, file_type: str):
                 "status": "published"
             })
             
-        embeddings = embedding_provider.embed_documents(texts_to_embed)
+        embeddings = get_embedding_provider().embed_documents(texts_to_embed)
         stats["embeddings_generated"] = len(embeddings)
         log_step(f"Generated {len(embeddings)} embeddings in {time.time() - t0:.2f}s")
         
@@ -118,7 +115,7 @@ def process_document_bg(doc_id: str, file_path: str, file_type: str):
         log_step("Storing in vector database...")
         t0 = time.time()
         
-        vector_store.upsert(ids, embeddings, payloads)
+        get_vector_store().upsert(ids, embeddings, payloads)
         stats["vectors_stored"] = len(ids)
         log_step(f"Indexed {len(ids)} vectors in {time.time() - t0:.2f}s")
         
@@ -222,9 +219,9 @@ def retrieve_from_document(doc_id: str, q: str, top_k: int = 3):
     if not q:
         raise HTTPException(400, "Query parameter 'q' is required")
         
-    query_embedding = embedding_provider.embed_query(q)
+    query_embedding = get_embedding_provider().embed_query(q)
     # Search qdrant, filtering by document_id
-    results = vector_store.search(query_embedding, top_k=top_k, filter_dict={"document_id": doc_id})
+    results = get_vector_store().search(query_embedding, top_k=top_k, filter_dict={"document_id": doc_id})
     return {"query": q, "results": results}
 
 @router.get("/settings")

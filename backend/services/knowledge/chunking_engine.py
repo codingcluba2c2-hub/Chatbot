@@ -1,34 +1,32 @@
 import re
+import hashlib
 from typing import List, Dict, Any
 
 class ChunkingEngine:
     @staticmethod
-    def chunk_text(text: str, document_id: str = "unknown", strategy: str = "character", max_chars: int = 1000, overlap: int = 200) -> List[Dict[str, Any]]:
+    def chunk_text(text: str, document_id: str = "unknown", strategy: str = "semantic", max_chars: int = 800, overlap: int = 150) -> List[Dict[str, Any]]:
         if not text:
             return []
             
         raw_chunks = []
-        if strategy == "character":
-            start = 0
-            text_len = len(text)
-            while start < text_len:
-                end = min(start + max_chars, text_len)
-                
-                # If we're not at the end, try to break at a newline or space
-                if end < text_len:
-                    last_newline = text.rfind('\n', start, end)
-                    last_space = text.rfind(' ', start, end)
-                    
-                    if last_newline != -1 and last_newline > start + overlap:
-                        end = last_newline
-                    elif last_space != -1 and last_space > start + overlap:
-                        end = last_space
-                        
-                raw_chunks.append(text[start:end].strip())
-                start = end - overlap if end < text_len else end
-                
-        elif strategy == "paragraph":
-            # Simple split by double newline
+        try:
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=max_chars,
+                chunk_overlap=overlap,
+                length_function=len,
+                is_separator_regex=False,
+                separators=[
+                    "\n\n",
+                    "\n",
+                    " ",
+                    ""
+                ]
+            )
+            raw_chunks = text_splitter.split_text(text)
+        except ImportError:
+            # Fallback to a basic implementation if the package is missing for some reason
+            # Split by double newline first, then enforce max_chars by splitting at spaces if needed
             paragraphs = re.split(r'\n\s*\n', text)
             current_chunk = ""
             for p in paragraphs:
@@ -51,6 +49,7 @@ class ChunkingEngine:
                 continue
             char_count = len(chunk_text)
             token_est = char_count // 4
+            chunk_hash = hashlib.sha256(chunk_text.encode('utf-8')).hexdigest()
             chunks_with_meta.append({
                 "content": chunk_text,
                 "metadata": {
@@ -61,6 +60,7 @@ class ChunkingEngine:
                     "page_number": None,
                     "section": None,
                     "heading": None,
+                    "hash": chunk_hash,
                     "embedding_status": "pending",
                     "vector_id": None
                 }

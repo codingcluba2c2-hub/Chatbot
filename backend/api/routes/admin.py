@@ -105,14 +105,3 @@ create_crud_routes(router, greeting_repo, Greeting, "greetings", pre_save_hook=g
 create_crud_routes(router, farewell_repo, Farewell, "farewells", pre_save_hook=generate_greeting_regex)
 create_crud_routes(router, faq_repo, FAQ, "faqs")
 create_crud_routes(router, fastpath_repo, FastPath, "fastpaths")
-
-@router.get("/dashboard/stats")
-def get_dashboard_stats():
-    return {
-        "greetings": greeting_repo.count(),
-        "farewells": farewell_repo.count(),
-        "faqs": faq_repo.count(),
-        "fastpaths": fastpath_repo.count(),
-        "pipeline_status": "Online",
-        "avg_response_time": "15ms"
-    }

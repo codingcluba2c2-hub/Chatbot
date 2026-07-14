@@ -4,43 +4,31 @@ from schemas.request import ChatRequest
 from schemas.response import ChatResponse
 from pipeline.pipeline_runner import PipelineRunner
 from pipeline.pipeline_context import PipelineContext
-from tools.registry import ToolRegistry
-from tools.impl.workflow_tool import LeaveWorkflowTool, CareerWorkflowTool, TicketWorkflowTool
-from tools.impl.employee_search import EmployeeSearchTool
-from tools.impl.attendance import AttendanceTool
 
-# Initialize and register tools
-ToolRegistry.register(LeaveWorkflowTool(), intents=["leave", "slash_leave"])
-ToolRegistry.register(CareerWorkflowTool(), intents=["career", "slash_career"])
-ToolRegistry.register(TicketWorkflowTool(), intents=["ticket", "slash_ticket"])
-ToolRegistry.register(EmployeeSearchTool(), intents=["employee_search", "slash_employee"])
-ToolRegistry.register(AttendanceTool(), intents=["attendance", "slash_attendance"])
-
-# Initialize pipeline steps
 from steps.normalize_step import NormalizeStep
+from steps.conversation_opener_step import ConversationOpenerStep
+from steps.meaningful_validator_step import MeaningfulValidatorStep
 from steps.gibberish_step import GibberishStep
-from steps.spell_correction_step import SpellCorrectionStep
-from steps.greeting_step import GreetingStep
 from steps.farewell_step import FarewellStep
-from steps.fastpath_step import FastPathStep
+from steps.fastpath_router_step import FastPathRouterStep
+from steps.knowledge_search_step import KnowledgeSearchStep
+from steps.response_formatter_step import ResponseFormatterStep
 from steps.faq_step import FAQStep
-from steps.tool_step import ToolRouterStep
-from steps.rag_step import RAGStep
-from steps.memory_step import MemoryStep
-from steps.response_step import ResponseStep
+from steps.llm_step import LLMStep
+from steps.fallback_step import FallbackStep
 
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
-pipeline_runner.register_step("Gibberish", GibberishStep())
-pipeline_runner.register_step("SpellCorrection", SpellCorrectionStep())
-pipeline_runner.register_step("Greeting", GreetingStep())
+pipeline_runner.register_step("ConversationOpener", ConversationOpenerStep())
 pipeline_runner.register_step("Farewell", FarewellStep())
-pipeline_runner.register_step("FastPath", FastPathStep())
+pipeline_runner.register_step("MeaningfulValidator", MeaningfulValidatorStep())
+pipeline_runner.register_step("FastPathRouter", FastPathRouterStep())
 pipeline_runner.register_step("FAQ", FAQStep())
-pipeline_runner.register_step("ToolRouter", ToolRouterStep())
-pipeline_runner.register_step("RAG", RAGStep())
-pipeline_runner.register_step("Memory", MemoryStep())
-pipeline_runner.register_step("Response", ResponseStep())
+pipeline_runner.register_step("KnowledgeSearch", KnowledgeSearchStep())
+pipeline_runner.register_step("ResponseFormatter", ResponseFormatterStep())
+pipeline_runner.register_step("LLM", LLMStep())
+pipeline_runner.register_step("Fallback", FallbackStep())
+pipeline_runner.register_step("Gibberish", GibberishStep())
 
 router = APIRouter()
 
@@ -56,6 +44,10 @@ async def chat_endpoint(request: ChatRequest):
     
     result = pipeline_runner.process(context)
     
+    if result.get("success") is False:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content=result)
+        
     return ChatResponse(
         intent=result["intent"],
         response=result["response"],
