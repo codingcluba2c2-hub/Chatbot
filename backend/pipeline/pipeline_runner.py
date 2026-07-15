@@ -112,6 +112,10 @@ class PipelineRunner:
         # Handle greeting prefix if it was a multi-intent query
         if "greeting_prefix" in context.metadata and final_intent != "Greeting":
             final_response = f"{context.metadata['greeting_prefix']} {final_response}"
+            
+        # Handle fastpath prefix if it was a multi-intent query
+        if "fastpath_prefix" in context.metadata and final_intent != "FastPath":
+            final_response = f"{context.metadata['fastpath_prefix']}\n\n{final_response}"
         
         response_obj = {
             "success": True,

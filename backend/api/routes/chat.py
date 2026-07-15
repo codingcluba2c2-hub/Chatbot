@@ -7,7 +7,7 @@ from pipeline.pipeline_context import PipelineContext
 
 from steps.normalize_step import NormalizeStep
 from steps.conversation_intelligence_step import ConversationIntelligenceStep
-from steps.spell_correction_step import SpellCorrectionStep
+from steps.intent_normalization_step import IntentNormalizationStep
 from steps.conversation_opener_step import ConversationOpenerStep
 from steps.assistant_preference_step import AssistantPreferenceStep
 from steps.session_memory_step import SessionMemoryStep
@@ -25,7 +25,7 @@ from steps.semantic_cache_step import SemanticCacheStep
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
 pipeline_runner.register_step("ConversationIntelligence", ConversationIntelligenceStep())
-pipeline_runner.register_step("SpellCorrection", SpellCorrectionStep())
+pipeline_runner.register_step("IntentNormalization", IntentNormalizationStep())
 pipeline_runner.register_step("ConversationOpener", ConversationOpenerStep())
 pipeline_runner.register_step("AssistantPreference", AssistantPreferenceStep())
 pipeline_runner.register_step("SessionMemory", SessionMemoryStep())
