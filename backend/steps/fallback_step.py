@@ -2,6 +2,7 @@ import re
 from steps.base_step import PipelineStep
 from pipeline.pipeline_context import PipelineContext
 from pipeline.pipeline_result import PipelineResult
+from repositories.registry import fastpath_repo, faq_repo
 
 def extract_topic(message: str) -> str:
     cleaned = re.sub(r'[^\w\s\']', '', message).strip()
@@ -23,28 +24,29 @@ class FallbackStep(PipelineStep):
             
         topic = extract_topic(context.original_message)
         
-        fallback_msg = f"""⚠️ **Information Not Available**
+        fallback_msg = f"""I couldn't find information about
+"{context.original_message}" in the current knowledge base.
 
-I couldn't find any information related to **"{topic}"** in my current enterprise knowledge base.
+You may try one of these instead:"""
 
-This assistant is designed to answer questions related to Mobiloitte's enterprise services and enterprise business knowledge.
-
-Please ask me questions related to:
-• Enterprise AI Systems
-• AI Agents
-• RAG Solutions
-• Blockchain Platforms
-• Enterprise Software Development
-• Cloud Infrastructure
-• Cybersecurity
-• Digital Transformation
-
-You may also try one of the suggested topics below."""
+        # Generate suggestions dynamically or use defaults requested by user
+        default_topics = [
+            "Office Timings", 
+            "Career", 
+            "Our Services", 
+            "Contact Us", 
+            "Company About", 
+            "Projects Completed"
+        ]
+        
+        # We can still add fastpaths/faqs if we want, but user requested these specifically.
+        # Let's just use the exact 6 requested to make a perfect 2x3 grid.
+        suggestions = default_topics
 
         components = [
             {
                 "type": "quickReplies",
-                "items": ["Enterprise AI Services", "RAG Architecture", "Blockchain Solutions", "Cloud Infrastructure", "Digital Transformation", "Contact Mobiloitte"]
+                "items": suggestions
             }
         ]
 
@@ -53,5 +55,10 @@ You may also try one of the suggested topics below."""
             intent="Fallback",
             response=fallback_msg,
             components=components,
-            metadata={"reason": "No match found in FastPath, FAQ, or Knowledge Base", "topic": topic}
+            metadata={
+                "reason": "No Relevant Chunks", 
+                "topic": topic,
+                "Suggestions Generated": len(suggestions),
+                "Suggestion Source": "FastPath + FAQ + Knowledge Base"
+            }
         )

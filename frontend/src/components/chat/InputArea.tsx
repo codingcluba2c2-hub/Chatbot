@@ -49,15 +49,6 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
 
       {/* Input Form */}
       <form onSubmit={handleSend} className="relative flex items-end gap-2 bg-white dark:bg-slate-900 border-2 border-gray-200/80 dark:border-slate-700/80 rounded-full px-2.5 py-1.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300">
-        
-        {/* Left Actions */}
-        <div className="flex items-center gap-1 mb-0.5 ml-1">
-          <Tooltip content="Menu">
-            <button type="button" className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-full transition-colors" aria-label="Menu">
-              <Menu size={18} />
-            </button>
-          </Tooltip>
-        </div>
 
         {/* Textarea */}
         <textarea
@@ -74,8 +65,13 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
         {/* Right Actions */}
         <div className="mb-0.5 mr-0.5 flex items-center gap-1">
           <div className="hidden sm:block">
-            <Tooltip content="Voice Input">
-              <button type="button" className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-full transition-colors mr-1" aria-label="Voice input">
+            <Tooltip content="Coming soon">
+              <button 
+                type="button" 
+                disabled 
+                className="p-2 text-gray-400 opacity-50 cursor-not-allowed rounded-full mr-1" 
+                aria-label="Voice input coming soon"
+              >
                 <Mic size={18} />
               </button>
             </Tooltip>

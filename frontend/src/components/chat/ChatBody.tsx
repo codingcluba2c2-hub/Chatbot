@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowDown, Calendar, LayoutGrid, Briefcase, Mail } from 'lucide-react';
+import { ArrowDown, Calendar, LayoutGrid, Briefcase, Mail, CheckSquare, Star } from 'lucide-react';
 import { ChatMessage, MessageProps } from './ChatMessage';
 import { TypingIndicator } from './TypingIndicator';
 import { ThinkingIndicator } from './ThinkingIndicator';
@@ -41,6 +41,8 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
     { icon: <LayoutGrid size={16} />, text: "Our Services" },
     { icon: <Briefcase size={16} />, text: "Career Opportunities" },
     { icon: <Mail size={16} />, text: "Contact Us" },
+    { icon: <CheckSquare size={16} />, text: "Projects Completed" },
+    { icon: <Star size={16} />, text: "Client Satisfaction" },
   ];
 
   return (
@@ -59,7 +61,7 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
             </div>
             <div className="flex flex-col max-w-[75%] items-start -ml-1">
               <div className="relative px-4 py-3 text-[13px] md:text-[14px] xl:text-[15px] leading-relaxed break-words whitespace-pre-wrap transition-all duration-300 bg-white border border-gray-100 text-gray-800 rounded-[20px] rounded-bl-[4px] dark:bg-slate-800 dark:border-slate-700/60 dark:text-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-                Hi, I am Sara, Mobiloitte's virtual agent.<br/>How can I help you today?
+                Hi, I am Mobiloitte's virtual agent.<br/>How can I help you today?
                 <div className="flex justify-end text-[0.65rem] text-gray-400 mt-2 font-medium">
                   {format(new Date(), 'h:mm a')}
                 </div>

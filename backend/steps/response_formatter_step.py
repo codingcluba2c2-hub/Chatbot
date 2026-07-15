@@ -42,45 +42,50 @@ class ResponseFormatterStep(PipelineStep):
                     unique_sentences.add(clean_line)
                     ordered_sentences.append(clean_line)
                     
-        # Question type formatting
-        query_lower = context.normalized_message.lower()
-        formatted_output = ""
-        
-        if "leave policy" in query_lower or "leaves" in query_lower or "list" in query_lower:
-            formatted_output = "Here is the information requested:\n"
-            for sent in ordered_sentences[:5]:
-                formatted_output += f"- {sent}\n"
+        # Extractive Summarization Algorithm
+        query_words = set([w for w in context.normalized_message.lower().split() if len(w) > 3 and w not in ["what", "when", "where", "how", "who", "why", "the", "and", "for", "that"]])
+        if not query_words:
+            # Fallback if no substantial query words, use first few sentences
+            query_words = set(context.normalized_message.lower().split())
+
+        selected_sentences = []
+        for i, sent in enumerate(ordered_sentences):
+            sent_lower = sent.lower()
+            if any(qw in sent_lower for qw in query_words):
+                # Add surrounding sentences (1 before, 1 after)
+                if i > 0:
+                    selected_sentences.append(ordered_sentences[i-1])
+                selected_sentences.append(sent)
+                if i < len(ordered_sentences) - 1:
+                    selected_sentences.append(ordered_sentences[i+1])
+                    
+        # Remove duplicates while preserving order
+        final_sentences = []
+        for s in selected_sentences:
+            if s not in final_sentences:
+                final_sentences.append(s)
                 
-        elif "hour" in query_lower or "time" in query_lower:
-            formatted_output = "Working Hours:\n"
-            for sent in ordered_sentences[:3]:
-                if "am" in sent.lower() or "pm" in sent.lower() or "hour" in sent.lower():
-                    formatted_output += f"{sent}\n"
-            if formatted_output == "Working Hours:\n":
-                formatted_output += ordered_sentences[0] if ordered_sentences else ""
-                
-        elif "address" in query_lower or "location" in query_lower:
-            address_lines = [s for s in ordered_sentences if any(k in s.lower() for k in ["address", "street", "city", "country", "pin", "code"])]
-            if address_lines:
-                formatted_output = "Address:\n" + "\n".join(address_lines[:2])
-            else:
-                formatted_output = ordered_sentences[0] if ordered_sentences else ""
-                
-        elif "email" in query_lower or "contact" in query_lower:
-            email_lines = [s for s in ordered_sentences if "@" in s or "contact" in s.lower()]
-            if email_lines:
-                formatted_output = "Contact Information:\n" + "\n".join(email_lines[:3])
-            else:
-                formatted_output = ordered_sentences[0] if ordered_sentences else ""
-                
-        else:
-            # Fact / General
-            formatted_output = " ".join(ordered_sentences[:3]) # Limit to 3 sentences for conciseness
+        # If no keywords matched, just take the first 3 lines
+        if not final_sentences:
+            final_sentences = ordered_sentences[:3]
             
+        # Maximum 5 lines
+        final_sentences = final_sentences[:5]
+        
+        # Format output
+        formatted_output = ""
+        for s in final_sentences:
+            # Format list items nicely if they look like bullet points
+            if "leave:" in s.lower() or "days" in s.lower():
+                formatted_output += f"{s}\n\n"
+            else:
+                formatted_output += f"{s}\n"
+                
         if not formatted_output.strip():
             formatted_output = "I don't have enough information regarding this topic."
             
         context.metadata["formatted_rag_response"] = formatted_output.strip()
+        context.metadata["Summary Mode"] = True
         context.metadata["response_formatter_used"] = True
         
         return PipelineResult(continue_pipeline=True)

@@ -32,6 +32,16 @@ class QdrantProvider(VectorStoreProvider):
                     collection_name=self.collection_name,
                     vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
                 )
+                
+            # Ensure payload index for document_id exists to avoid filtering 400 errors
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="document_id",
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+            except Exception as e:
+                logger.debug(f"Payload index for document_id might already exist or not needed: {e}")
             logger.info("Qdrant client initialized.")
         except ImportError:
             logger.error("qdrant-client not installed.")
@@ -85,3 +95,29 @@ class QdrantProvider(VectorStoreProvider):
             collection_name=self.collection_name,
             points_selector=models.PointIdsList(points=ids)
         )
+
+    def get_document_embeddings(self, doc_id: str) -> List[Dict[str, Any]]:
+        if not self.client: return []
+        from qdrant_client.http import models
+        
+        qdrant_filter = models.Filter(must=[
+            models.FieldCondition(key="document_id", match=models.MatchValue(value=doc_id))
+        ])
+        
+        results, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=qdrant_filter,
+            with_vectors=True,
+            with_payload=True,
+            limit=1000
+        )
+        
+        embeddings_list = []
+        for point in results:
+            embeddings_list.append({
+                "id": point.id,
+                "vector": point.vector,
+                "payload": point.payload
+            })
+            
+        return embeddings_list

@@ -83,15 +83,44 @@ class SessionMemoryStep(PipelineStep):
                 context.metadata["Extracted Name"] = extracted_name
                 context.metadata["Storage"] = "localStorage"
                 
+                components = [
+                    {
+                        "type": "quickReplies",
+                        "items": [
+                            "Office Timings",
+                            "Career",
+                            "Our Services",
+                            "Contact Us",
+                            "Company About",
+                            "Projects Completed"
+                        ]
+                    }
+                ]
+                
                 prefix = context.metadata.get("greeting_prefix", "Hello!")
                 response = f"{prefix} {extracted_name}! Nice to meet you. How can i help you today."
                 return PipelineResult(
                     stop=True,
                     intent=INTENT_GREETING,
                     response=response,
-                    actions=actions
+                    actions=actions,
+                    components=components
                 )
             elif routing == "Greeting (Empty remaining query)":
+                components = [
+                    {
+                        "type": "quickReplies",
+                        "items": [
+                            "Office Timings",
+                            "Career",
+                            "Our Services",
+                            "Contact Us",
+                            "Company About",
+                            "Projects Completed"
+                        ]
+                    }
+                ]
+                
                 prefix = context.metadata.get("greeting_prefix", "Hello!")
                 base_opener = context.metadata.get("greeting_token", "Hello")
                 final_response = ResponseService.get_sequential_response(
@@ -102,7 +131,8 @@ class SessionMemoryStep(PipelineStep):
                 return PipelineResult(
                     stop=True,
                     intent=INTENT_GREETING,
-                    response=final_response
+                    response=final_response,
+                    components=components
                 )
         
         if extracted_name:

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Bot, User, Check, CheckCheck, Copy, RefreshCw, ThumbsUp, ThumbsDown, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -33,9 +33,12 @@ const getIntentColor = (intent?: string) => {
 
 export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, timestamp, status, trace, components, actions, onReplay, onAction }) => {
   const isBot = role === 'bot';
+  const [isCopied, setIsCopied] = useState(false);
   
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
   return (
@@ -55,8 +58,8 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
       {/* Message Bubble Container */}
       <div className={cn("flex flex-col max-w-[75%]", isBot ? "items-start -ml-1" : "items-end")}>
         
-        {/* Name / Badge Row */}
-        {isBot && intent && (
+        {/* Name / Badge Row Intent Show */}
+        {/* {isBot && intent && (
           <div className="mb-1.5 ml-2">
             <span className={cn(
               "text-[0.65rem] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border shadow-sm",
@@ -65,7 +68,7 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
               {intent.toLowerCase() === 'knowledge' ? 'RAG' : intent.toLowerCase() === 'fallback' ? 'OUT OF SCOPE' : intent}
             </span>
           </div>
-        )}
+        )} */}
 
         {/* Bubble */}
         <div className={cn(
@@ -103,38 +106,39 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
         </div>
         
         {/* Actions Toolbar */}
-        {isBot && (
-          <div className="flex items-center gap-2 mt-1.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <Tooltip content="Helpful">
-              <button className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
-                <ThumbsUp size={13} />
-              </button>
-            </Tooltip>
-            <Tooltip content="Not Helpful">
-              <button className="p-1 text-gray-400 hover:text-red-600 transition-colors">
-                <ThumbsDown size={13} />
-              </button>
-            </Tooltip>
-            <Tooltip content="Copy">
-              <button onClick={handleCopy} className="p-1 text-gray-400 hover:text-gray-700 transition-colors">
-                <Copy size={13} />
-              </button>
-            </Tooltip>
-            <Tooltip content="Listen">
-              <button className="p-1 text-gray-400 hover:text-gray-700 transition-colors">
-                <Volume2 size={13} />
-              </button>
-            </Tooltip>
-            
-            {onReplay && trace && (
-              <Tooltip content="Replay Pipeline">
-                <button onClick={onReplay} className="p-1 text-emerald-500 hover:text-emerald-700 transition-colors ml-1">
-                  <RefreshCw size={13} />
+        <div className={cn(
+          "flex items-center gap-2 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+          isBot ? "ml-2" : "mr-2 justify-end"
+        )}>
+          {isBot && (
+            <>
+              <Tooltip content="Helpful">
+                <button className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
+                  <ThumbsUp size={13} />
                 </button>
               </Tooltip>
-            )}
-          </div>
-        )}
+              <Tooltip content="Not Helpful">
+                <button className="p-1 text-gray-400 hover:text-red-600 transition-colors">
+                  <ThumbsDown size={13} />
+                </button>
+              </Tooltip>
+            </>
+          )}
+          
+          <Tooltip content={isCopied ? "Copied!" : "Copy"}>
+            <button onClick={handleCopy} className="p-1 text-gray-400 hover:text-gray-700 transition-colors">
+              {isCopied ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+            </button>
+          </Tooltip>
+          
+          {isBot && onReplay && trace && (
+            <Tooltip content="Replay Pipeline">
+              <button onClick={onReplay} className="p-1 text-emerald-500 hover:text-emerald-700 transition-colors ml-1">
+                <RefreshCw size={13} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       {/* User Avatar */}

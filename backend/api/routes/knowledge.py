@@ -229,6 +229,40 @@ def retrieve_from_document(doc_id: str, q: str, top_k: int = 3):
     results = get_vector_store().search(query_embedding, top_k=top_k, filter_dict={"document_id": doc_id})
     return {"query": q, "results": results}
 
+@router.get("/documents/{doc_id}/embeddings")
+def get_document_embeddings(doc_id: str):
+    doc = document_repo.get_by_id(doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+        
+    vector_store = get_vector_store()
+    if not hasattr(vector_store, 'get_document_embeddings'):
+        raise HTTPException(501, "Vector store does not support fetching raw embeddings")
+        
+    raw_embeddings = vector_store.get_document_embeddings(doc_id)
+    
+    formatted_embeddings = []
+    for i, emb in enumerate(raw_embeddings):
+        payload = emb.get("payload", {})
+        formatted_embeddings.append({
+            "chunk_number": i + 1,
+            "chunk_id": payload.get("chunk_id", emb.get("id")),
+            "content": payload.get("content", ""),
+            "vector_dimension": len(emb.get("vector", [])),
+            "vector": emb.get("vector", [])
+        })
+        
+    from core.config import EMBEDDING_MODEL, VECTOR_COLLECTION
+    return {
+        "document_id": doc_id,
+        "embedding_model": EMBEDDING_MODEL,
+        "dimension": 384,
+        "collection": VECTOR_COLLECTION,
+        "distance": "COSINE",
+        "total_chunks": len(formatted_embeddings),
+        "embeddings": formatted_embeddings
+    }
+
 @router.get("/settings")
 def get_settings():
     from repositories.registry import settings_repo

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, FileText, Database, HardDrive, Trash2, CheckCircle, Clock, AlertTriangle, Search, Filter, RefreshCw, Layers } from 'lucide-react';
 import { format } from 'date-fns';
+import { EmbeddingsTab } from './EmbeddingsTab';
 
 export const KnowledgeBaseModule = () => {
   const [documents, setDocuments] = useState<any[]>([]);
@@ -32,6 +33,12 @@ export const KnowledgeBaseModule = () => {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const res = await fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc?.id}/retrieve?q=${encodeURIComponent(retrievalQuery)}`);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "Unknown error");
+        console.error("Retrieval failed:", errText);
+        setRetrievalResults([]);
+        return;
+      }
       const data = await res.json();
       setRetrievalResults(data.results || []);
     } catch(e) {
@@ -340,7 +347,7 @@ export const KnowledgeBaseModule = () => {
       
       {selectedDoc && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end">
-          <div className="w-[500px] h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="w-[800px] max-w-[90vw] h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
             <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-start">
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 break-all">{selectedDoc.name}</h2>
@@ -353,6 +360,7 @@ export const KnowledgeBaseModule = () => {
               <button onClick={() => setActiveTab('chunks')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'chunks' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Chunks</button>
               <button onClick={() => setActiveTab('raw')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'raw' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Raw Extracted Text</button>
               <button onClick={() => setActiveTab('retrieval')} className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'retrieval' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Retrieval Test</button>
+              <button onClick={() => setActiveTab('embeddings')} className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${activeTab === 'embeddings' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Embeddings</button>
             </div>
 
             <div className="p-6 flex-1 overflow-auto">
@@ -479,6 +487,10 @@ export const KnowledgeBaseModule = () => {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {activeTab === 'embeddings' && (
+                <EmbeddingsTab documentId={selectedDoc.id} />
               )}
             </div>
           </div>
