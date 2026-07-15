@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Float, Integer, JSON
+from pgvector.sqlalchemy import Vector
 from core.database import Base
 
 class KnowledgeDocumentDB(Base):
@@ -28,9 +29,14 @@ class DocumentChunkDB(Base):
     
     id = Column(String, primary_key=True, index=True)
     document_id = Column(String, index=True)
+    chunk_number = Column(Integer, default=0)
+    title = Column(String, nullable=True)
     content = Column(String)
+    embedding = Column(Vector(384))
     metadata_col = Column("metadata", JSON, default=dict)
+    token_count = Column(Integer, default=0)
     created_at = Column(Float)
+    updated_at = Column(Float)
 
 class KnowledgeSettingsDB(Base):
     __tablename__ = "knowledge_settings"

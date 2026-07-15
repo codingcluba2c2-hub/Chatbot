@@ -15,6 +15,14 @@ engine = create_engine(
         "keepalives_count": 5
     }
 )
+from sqlalchemy import event
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+@event.listens_for(engine, "connect")
+def on_connect(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    cursor.close()
 
 Base = declarative_base()

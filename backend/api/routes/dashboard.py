@@ -15,7 +15,7 @@ def get_dashboard_overview():
         pipeline_status = "Online"
         backend_status = "Healthy"
         db_status = "Connected"
-        qdrant_status = "Connected"
+        pgvector_status = "Connected"
         gemini_status = "Available"
         
         # 2. Counts
@@ -55,7 +55,7 @@ def get_dashboard_overview():
         return {
             "pipeline": {
                 "status": pipeline_status, "backend": backend_status, "database": db_status, 
-                "qdrant": qdrant_status, "gemini": gemini_status,
+                "pgvector": pgvector_status, "gemini": gemini_status,
                 "embedding_model": "Available", "current_collection": "knowledge_base",
                 "knowledge_documents": doc_count, "indexed_chunks": chunks_indexed,
                 "avg_response_time": "45ms", "avg_retrieval_time": "12ms",

@@ -1,7 +1,7 @@
 import re
 import hashlib
 import unicodedata
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 class ChunkingEngine:
     @staticmethod
@@ -17,7 +17,7 @@ class ChunkingEngine:
         return text.strip()
 
     @staticmethod
-    def find_chunk_boundaries(text: str, max_chars: int, overlap: int) -> List[str]:
+    def find_chunk_boundaries(text: str, max_chars: int, overlap: int) -> List[Tuple[int, str]]:
         # Semantic chunking: prefer paragraphs, then sentences, then line breaks, then words
         chunks = []
         start = 0
@@ -26,7 +26,7 @@ class ChunkingEngine:
         while start < text_len:
             # If remaining text fits in max_chars, take it all
             if text_len - start <= max_chars:
-                chunks.append(text[start:])
+                chunks.append((start, text[start:]))
                 break
                 
             # We need to find the best split point between start + max_chars - 200 and start + max_chars
@@ -80,10 +80,10 @@ class ChunkingEngine:
             chunk_content = text[start:split_idx].strip()
             
             if chunk_content and chunk_content[0].isalnum() or chunk_content[0] in '“"\'([{¿¡':
-                chunks.append(chunk_content)
+                chunks.append((start, chunk_content))
             elif chunk_content:
                 # If chunk starts with bad punctuation, strip it
-                chunks.append(re.sub(r'^[^a-zA-Z0-9]+', '', chunk_content).strip())
+                chunks.append((start, re.sub(r'^[^a-zA-Z0-9]+', '', chunk_content).strip()))
             
             # Calculate next start with overlap, snapping to nearest word/sentence boundary
             next_start_raw = split_idx - overlap
@@ -110,14 +110,35 @@ class ChunkingEngine:
         if not text:
             return []
             
+        import re
+        page_map = []
+        clean_text = ""
+        last_idx = 0
+        
+        for match in re.finditer(r'\n*__PAGE_BOUNDARY_(\d+)__\n*', text):
+            chunk_part = text[last_idx:match.start()]
+            clean_text += chunk_part
+            page_map.append((len(clean_text), int(match.group(1))))
+            last_idx = match.end()
+            
+        clean_text += text[last_idx:]
+        text = clean_text
+            
         text = ChunkingEngine.preprocess_text(text)
         raw_chunks = ChunkingEngine.find_chunk_boundaries(text, max_chars, overlap)
                 
         # Generate robust metadata
         chunks_with_meta = []
-        for i, chunk_text in enumerate(raw_chunks):
+        for i, (start_idx, chunk_text) in enumerate(raw_chunks):
             if not chunk_text:
                 continue
+                
+            page_num = 1
+            for p_idx, p_num in page_map:
+                if start_idx >= p_idx:
+                    page_num = p_num
+                else:
+                    break
             char_count = len(chunk_text)
             token_est = char_count // 4
             chunk_hash = hashlib.sha256(chunk_text.encode('utf-8')).hexdigest()
@@ -136,7 +157,7 @@ class ChunkingEngine:
                     "estimated_tokens": token_est,
                     "first_sentence": first_sentence[:150] + "..." if len(first_sentence) > 150 else first_sentence,
                     "last_sentence": last_sentence[:150] + "..." if len(last_sentence) > 150 else last_sentence,
-                    "page_number": None,
+                    "page_number": page_num,
                     "section": None,
                     "heading": None,
                     "hash": chunk_hash,

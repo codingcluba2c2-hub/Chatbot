@@ -7,7 +7,7 @@ from services.llm import get_llm_provider
 from core.database import SessionLocal
 from models.cache import ChatCacheDB
 from core.circuit_breaker import llm_circuit_breaker
-from services.rag.response_builder import ContextResponseBuilder
+from services.rag.local_response_generator import LocalResponseGenerator
 import time
 
 logger = logging.getLogger(__name__)
@@ -138,8 +138,10 @@ class LLMStep(PipelineStep):
     def _handle_fallback(self, context: PipelineContext, error_msg: str, latency_ms: int) -> PipelineResult:
         rag_chunks = context.metadata.get("rag_chunks", [])
         
-        # Build concise fallback response using new ContextResponseBuilder
-        clean_text = ContextResponseBuilder.build_concise_fallback(rag_chunks)
+        # Build intelligent fallback response using LocalResponseGenerator
+        local_result = LocalResponseGenerator.generate(context.normalized_message, rag_chunks)
+        clean_text = local_result["response"]
+        local_metadata = local_result["metadata"]
         
         status_match = "FAILED"
         if "429" in error_msg:
@@ -182,12 +184,10 @@ class LLMStep(PipelineStep):
             actions=[],
             metadata={
                 "gemini_status": status_match,
-                "fallback_used": True,
-                "retrieved_chunks": len(rag_chunks),
-                "response_source": "Knowledge Builder",
                 "circuit_state": llm_circuit_breaker.state,
                 "llm_error": error_msg,
                 "llm_latency_ms": latency_ms,
-                "retry_count": llm_circuit_breaker.consecutive_failures
+                "retry_count": llm_circuit_breaker.consecutive_failures,
+                **local_metadata
             }
         )

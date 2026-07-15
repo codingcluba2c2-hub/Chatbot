@@ -61,9 +61,10 @@ class ExtractionEngine:
                 import PyPDF2
                 with open(file_path, 'rb') as f:
                     reader = PyPDF2.PdfReader(f)
-                    for page in reader.pages:
+                    for i, page in enumerate(reader.pages):
                         page_text = page.extract_text()
                         if page_text:
+                            text += f"\n\n__PAGE_BOUNDARY_{i+1}__\n\n"
                             text += page_text + "\n"
             except ImportError:
                 raise RuntimeError("PyPDF2 not installed. Cannot extract PDF.")

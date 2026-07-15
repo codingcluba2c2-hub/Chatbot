@@ -93,23 +93,21 @@ def process_document_bg(doc_id: str, file_path: str, file_type: str):
         payloads = []
         texts_to_embed = []
         
+        import uuid
         for c_data in chunks_data:
-            chunk = DocumentChunk(
-                document_id=doc_id,
-                content=c_data["content"],
-                metadata=c_data["metadata"]
-            )
-            chunk_repo.create(chunk)
-            
-            ids.append(chunk.id)
+            chunk_id = str(uuid.uuid4())
+            ids.append(chunk_id)
             texts_to_embed.append(c_data["content"])
-            payloads.append({
-                "chunk_id": chunk.id,
+            
+            meta = c_data.get("metadata", {}).copy()
+            meta.update({
+                "chunk_id": chunk_id,
                 "document_id": doc_id,
                 "doc_name": doc.name,
                 "content": c_data["content"],
                 "status": "published"
             })
+            payloads.append(meta)
             
         embeddings = get_embedding_provider().embed_documents(texts_to_embed)
         stats["embeddings_generated"] = len(embeddings)
@@ -193,17 +191,35 @@ async def upload_document(
 
 @router.get("/documents", response_model=List[KnowledgeDocument])
 def list_documents(skip: int = 0, limit: int = 100):
-    return document_repo.get_all(skip=skip, limit=limit)
+    docs = document_repo.get_all(skip=skip, limit=limit)
+    # Strip raw_text to prevent massive JSON payloads during polling
+    for doc in docs:
+        doc.raw_text = None
+    return docs
+
+@router.get("/documents/{doc_id}", response_model=KnowledgeDocument)
+def get_document(doc_id: str):
+    doc = document_repo.get_by_id(doc_id)
+    if not doc:
+        raise HTTPException(404, "Not found")
+    return doc
 
 @router.delete("/documents/{doc_id}")
 def delete_document(doc_id: str):
     doc = document_repo.get_by_id(doc_id)
     if doc:
-        # Delete chunks
-        all_chunks = chunk_repo.get_all()
-        chunks_to_delete = [c for c in all_chunks if c.document_id == doc_id]
-        for c in chunks_to_delete:
-            chunk_repo.delete(c.id)
+        from core.database import SessionLocal
+        from models.knowledge import DocumentChunkDB
+        from sqlalchemy import delete
+        
+        db = SessionLocal()
+        try:
+            # Delete chunks directly
+            stmt = delete(DocumentChunkDB).where(DocumentChunkDB.document_id == doc_id)
+            db.execute(stmt)
+            db.commit()
+        finally:
+            db.close()
             
         # Delete file
         if doc.file_path and os.path.exists(doc.file_path):
@@ -216,8 +232,24 @@ def delete_document(doc_id: str):
 
 @router.get("/documents/{doc_id}/chunks", response_model=List[DocumentChunk])
 def get_document_chunks(doc_id: str):
-    all_chunks = chunk_repo.get_all()
-    return [c for c in all_chunks if c.document_id == doc_id]
+    from core.database import SessionLocal
+    from models.knowledge import DocumentChunkDB
+    from sqlalchemy.orm import defer
+    db = SessionLocal()
+    try:
+        # Defer embedding to make this query blazing fast
+        db_chunks = db.query(DocumentChunkDB).filter(DocumentChunkDB.document_id == doc_id).options(defer(DocumentChunkDB.embedding)).all()
+        return [
+            DocumentChunk(
+                id=c.id,
+                document_id=c.document_id,
+                content=c.content,
+                metadata=c.metadata_col,
+                created_at=c.created_at
+            ) for c in db_chunks
+        ]
+    finally:
+        db.close()
 
 @router.get("/documents/{doc_id}/retrieve")
 def retrieve_from_document(doc_id: str, q: str, top_k: int = 3):
@@ -263,6 +295,30 @@ def get_document_embeddings(doc_id: str):
         "embeddings": formatted_embeddings
     }
 
+@router.get("/chunks/{chunk_id}/embedding")
+def get_chunk_embedding(chunk_id: str):
+    from core.database import SessionLocal
+    from models.knowledge import DocumentChunkDB
+    db = SessionLocal()
+    try:
+        chunk = db.query(DocumentChunkDB).filter(DocumentChunkDB.id == chunk_id).first()
+        if not chunk:
+            raise HTTPException(404, "Chunk not found")
+            
+        # Handle numpy arrays or lists from vector column
+        vector_data = chunk.embedding.tolist() if hasattr(chunk.embedding, "tolist") else chunk.embedding
+            
+        return {
+            "chunk_id": chunk.id,
+            "document_id": chunk.document_id,
+            "content": chunk.content,
+            "vector_dimension": len(vector_data) if vector_data else 0,
+            "vector": vector_data,
+            "metadata": chunk.metadata_col
+        }
+    finally:
+        db.close()
+
 @router.get("/settings")
 def get_settings():
     from repositories.registry import settings_repo
@@ -297,22 +353,17 @@ def reprocess_document(doc_id: str, background_tasks: BackgroundTasks):
     if not doc:
         raise HTTPException(404, "Document not found")
     
-    # Delete old chunks from DB and Vector Store
-    all_chunks = chunk_repo.get_all()
-    old_chunks = [c for c in all_chunks if c.document_id == doc_id]
-    old_chunk_ids = [c.id for c in old_chunks]
+    from core.database import SessionLocal
+    from models.knowledge import DocumentChunkDB
+    from sqlalchemy import delete
     
-    for c in old_chunks:
-        chunk_repo.delete(c.id)
-        
-    # Delete existing vectors from vector database
+    db = SessionLocal()
     try:
-        if old_chunk_ids:
-            from services.rag.vector_store import get_vector_store
-            vector_store = get_vector_store()
-            vector_store.delete(old_chunk_ids)
-    except Exception as e:
-        print(f"Warning: Failed to delete vectors: {e}")
+        stmt = delete(DocumentChunkDB).where(DocumentChunkDB.document_id == doc_id)
+        db.execute(stmt)
+        db.commit()
+    finally:
+        db.close()
         
     # Reset stats
     doc.processing_stats = {}

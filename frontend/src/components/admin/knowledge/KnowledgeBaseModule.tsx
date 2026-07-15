@@ -16,6 +16,7 @@ export const KnowledgeBaseModule = () => {
   const [retrievalQuery, setRetrievalQuery] = useState("");
   const [retrievalResults, setRetrievalResults] = useState<any[]>([]);
   const [retrievalLoading, setRetrievalLoading] = useState(false);
+  const [viewingEmbedding, setViewingEmbedding] = useState<any | null>(null);
 
   useEffect(() => {
     if (selectedDoc && activeTab === "chunks") {
@@ -81,6 +82,20 @@ export const KnowledgeBaseModule = () => {
       console.error(e);
     } finally {
       setIsReprocessing(false);
+    }
+  };
+
+  const handleSelectDoc = async (doc: any) => {
+    setSelectedDoc(doc);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const res = await fetch(`${backendUrl}/api/knowledge/documents/${doc.id}`);
+      if (res.ok) {
+        const fullDoc = await res.json();
+        setSelectedDoc(fullDoc);
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -289,7 +304,7 @@ export const KnowledgeBaseModule = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <FileText size={18} className="text-slate-400" />
-                      <span className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer" onClick={() => setSelectedDoc(doc)}>
+                      <span className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer" onClick={() => handleSelectDoc(doc)}>
                         {doc.name}
                       </span>
                     </div>
@@ -482,7 +497,26 @@ export const KnowledgeBaseModule = () => {
                            <span className="text-xs font-semibold px-2 py-1 bg-blue-100 text-blue-700 rounded">Match #{i+1}</span>
                            <span className="text-xs font-semibold text-emerald-600">Score: {res.score.toFixed(3)}</span>
                          </div>
-                         <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{res.payload.content}</p>
+                         <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed mb-3">{res.payload.content}</p>
+                         <button 
+                           onClick={async () => {
+                             try {
+                               const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                               const fetchId = res.payload.chunk_id || res.id;
+                               const response = await fetch(`${backendUrl}/api/knowledge/chunks/${fetchId}/embedding`);
+                               if (response.ok) {
+                                 const data = await response.json();
+                                 data.similarity_score = res.score;
+                                 setViewingEmbedding(data);
+                               }
+                             } catch (e) {
+                               console.error(e);
+                             }
+                           }}
+                           className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
+                         >
+                           View Embedding
+                         </button>
                        </div>
                     ))}
                   </div>
@@ -492,6 +526,55 @@ export const KnowledgeBaseModule = () => {
               {activeTab === 'embeddings' && (
                 <EmbeddingsTab documentId={selectedDoc.id} />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Embedding Debugging Modal */}
+      {viewingEmbedding && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex justify-center items-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+              <h3 className="font-bold text-slate-900 dark:text-slate-100">Embedding Debugging (pgvector)</h3>
+              <button onClick={() => setViewingEmbedding(null)} className="text-slate-400 hover:text-slate-600">x</button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
+                  <div className="text-[10px] uppercase text-slate-500 mb-1">Dimension</div>
+                  <div className="font-bold">{viewingEmbedding.vector_dimension}</div>
+                </div>
+                <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
+                  <div className="text-[10px] uppercase text-slate-500 mb-1">Similarity Score</div>
+                  <div className="font-bold text-emerald-600">{viewingEmbedding.similarity_score?.toFixed(4) || "N/A"}</div>
+                </div>
+                <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg col-span-2">
+                  <div className="text-[10px] uppercase text-slate-500 mb-1">Chunk ID</div>
+                  <div className="font-bold font-mono text-xs">{viewingEmbedding.chunk_id}</div>
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Chunk Content</h4>
+                <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg text-sm whitespace-pre-wrap border border-slate-200 dark:border-slate-700">
+                  {viewingEmbedding.content}
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Metadata</h4>
+                <div className="bg-slate-900 text-slate-300 p-4 rounded-lg text-xs font-mono whitespace-pre-wrap overflow-auto max-h-40">
+                  {JSON.stringify(viewingEmbedding.metadata, null, 2)}
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Vector Values (First 100 dimensions)</h4>
+                <div className="bg-slate-900 text-slate-300 p-4 rounded-lg text-xs font-mono break-all leading-relaxed max-h-40 overflow-y-auto">
+                  [ {viewingEmbedding.vector?.slice(0, 100).map((v: number) => v.toFixed(6)).join(", ")}{viewingEmbedding.vector?.length > 100 ? ", ..." : ""} ]
+                </div>
+              </div>
             </div>
           </div>
         </div>
