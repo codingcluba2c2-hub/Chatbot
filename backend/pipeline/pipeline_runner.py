@@ -20,7 +20,7 @@ class PipelineRunner:
         total_start = time.perf_counter()
         
         final_intent = "Fallback"
-        final_response = "I'm sorry, I didn't understand that."
+        final_response = ""
         
         for step_name in PIPELINE_STEPS:
             if step_name not in self.steps:
@@ -86,7 +86,7 @@ class PipelineRunner:
             
             if hasattr(result, 'intent') and result.intent:
                 final_intent = result.intent
-            if hasattr(result, 'response') and result.response:
+            if hasattr(result, 'response') and result.response is not None:
                 final_response = result.response
                 
             # If the step returned components or actions, we capture them

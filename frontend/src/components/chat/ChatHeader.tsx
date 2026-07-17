@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { MoreVertical, Maximize2, Minimize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from './Tooltip';
-import { useTheme } from 'next-themes';
-
 interface ChatHeaderProps {
   status?: 'online' | 'offline';
   model?: string;

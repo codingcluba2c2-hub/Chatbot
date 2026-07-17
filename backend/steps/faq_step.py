@@ -16,6 +16,10 @@ class FAQStep(PipelineStep):
                 f"faq_{matched_question}",
                 answer
             )
+            greeting_prefix = context.metadata.get("greeting_prefix", "")
+            if greeting_prefix:
+                final_response = f"{greeting_prefix}\n\n{final_response}"
+                
             return PipelineResult(
                 stop=True,
                 intent=INTENT_FAQ,

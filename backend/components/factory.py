@@ -54,3 +54,14 @@ class ComponentBuilder:
             "type": "carousel",
             "items": cards
         }
+
+    @staticmethod
+    def fallback(query: str, suggestions: List[str], prefix: str = None, suffix: str = None) -> Dict[str, Any]:
+        return {
+            "type": "fallback",
+            "title": "Information Not Available",
+            "prefix": prefix or "I couldn't find any information related to",
+            "suffix": suffix or "in the current enterprise knowledge base.",
+            "query": query,
+            "suggestions": suggestions
+        }

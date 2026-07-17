@@ -48,7 +48,7 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
     <div className="bg-white dark:bg-[#0a0f1c] p-4 pt-2 relative z-20 transition-colors duration-300">
 
       {/* Input Form */}
-      <form onSubmit={handleSend} className="relative flex items-end gap-2 bg-white dark:bg-slate-900 border-2 border-gray-200/80 dark:border-slate-700/80 rounded-full px-2.5 py-1.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300">
+      <form onSubmit={handleSend} className="relative flex items-end gap-2 bg-white dark:bg-slate-900 border-2 border-gray-200/80 dark:border-slate-700/80 rounded-3xl px-3 py-1.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300">
 
         {/* Textarea */}
         <textarea
@@ -57,9 +57,8 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Type your message..."
-          disabled={isLoading}
           rows={1}
-          className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-[12px] md:text-[14px] py-2.5 px-1 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-800 dark:text-gray-100 font-medium"
+          className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-[13px] md:text-[15px] py-2.5 px-2 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-800 dark:text-gray-100 font-medium leading-relaxed"
         />
 
         {/* Right Actions */}

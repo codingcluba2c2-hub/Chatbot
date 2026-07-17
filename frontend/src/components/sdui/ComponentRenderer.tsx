@@ -5,6 +5,7 @@ import { DynamicCard } from './DynamicCard';
 import { DynamicForm } from './DynamicForm';
 import { DynamicTable } from './DynamicTable';
 import { DynamicCarousel } from './DynamicCarousel';
+import { FallbackCard } from './FallbackCard';
 
 export const ComponentRenderer = ({ 
   components, 
@@ -31,6 +32,8 @@ export const ComponentRenderer = ({
             return <DynamicTable key={idx} table={comp} />;
           case 'carousel':
             return <DynamicCarousel key={idx} carousel={comp} onAction={(action) => onAction('button_click', { action })} />;
+          case 'fallback':
+            return <FallbackCard key={idx} fallback={comp} onAction={onAction} />;
           default:
             return <div key={idx} className="text-xs text-red-400">Unknown component type: {comp.type}</div>;
         }

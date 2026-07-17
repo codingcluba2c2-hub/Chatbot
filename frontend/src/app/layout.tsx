@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { ThemeProvider } from "next-themes";
 import Providers from "./Providers";
 import "./globals.css";
 
@@ -22,11 +21,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} ${inter.variable} antialiased font-sans`}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <Providers>
-            {children}
-          </Providers>
-        </ThemeProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

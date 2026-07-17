@@ -207,15 +207,35 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                             
                             {trace.metadata?.greeting_detected && (
                               <>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-slate-400 text-[11px]">Greeting Token:</span>
-                                  <span className="text-amber-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">"{trace.metadata.greeting_token}"</span>
+                                <div className="flex justify-between items-center mt-1">
+                                  <span className="text-slate-400 text-[11px]">Greeting Type:</span>
+                                  <span className="text-amber-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">{trace.metadata.greeting_type}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
+                                <div className="flex justify-between items-center mt-1">
+                                  <span className="text-slate-400 text-[11px]">Corrected:</span>
+                                  <span className="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">{trace.metadata.corrected_greeting}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1">
+                                  <span className="text-slate-400 text-[11px]">Server Time:</span>
+                                  <span className="text-slate-300 font-mono text-[11px]">{trace.metadata.detected_time} ({trace.metadata.time_bucket})</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1">
+                                  <span className="text-slate-400 text-[11px]">Greeting Count:</span>
+                                  <span className="text-purple-400 font-bold text-[11px]">{trace.metadata.greeting_count}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1">
                                   <span className="text-slate-400 text-[11px]">Remaining Query:</span>
-                                  <span className="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">"{trace.metadata.remaining_query}"</span>
+                                  <span className="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px] truncate max-w-[150px]">"{trace.metadata.remaining_query}"</span>
                                 </div>
-                                <div className="flex justify-between items-center">
+                                <div className="flex flex-col mt-2 pt-2 border-t border-slate-700/50">
+                                  <span className="text-slate-500 text-[10px] uppercase mb-1">Selected Template:</span>
+                                  <span className="text-emerald-300 text-[11px] italic">"{trace.metadata.selected_template}"</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-2">
+                                  <span className="text-slate-400 text-[11px]">Execution Time:</span>
+                                  <span className="text-slate-300 font-mono text-[11px]">{trace.metadata.execution_time_ms}ms</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1 pt-1 border-t border-slate-700/50">
                                   <span className="text-slate-400 text-[11px]">Routing:</span>
                                   <span className="text-purple-400 text-[11px] font-semibold">{trace.metadata.routing}</span>
                                 </div>
@@ -225,21 +245,64 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                         </>
                       )}
                       
+                      {trace.metadata?.memory_intent && (
+                        <>
+                          <div className="text-center text-slate-600">↓</div>
+                          <div className="flex flex-col gap-2 bg-slate-800/50 p-3 rounded border border-slate-700/50">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-300 font-semibold text-xs">Memory Engine:</span>
+                              <span className="text-emerald-400 font-bold">{trace.metadata.memory_intent}</span>
+                            </div>
+                            
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-slate-400 text-[11px]">Detected Field:</span>
+                              <span className="text-amber-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">{trace.metadata.detected_field}</span>
+                            </div>
+                            
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-slate-400 text-[11px]">Previous Value:</span>
+                              <span className="text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded text-[11px] truncate max-w-[120px]">
+                                {trace.metadata.previous_value || 'null'}
+                              </span>
+                            </div>
+                            
+                            {trace.metadata.memory_intent === "UPDATE" && (
+                              <div className="flex justify-between items-center mt-1">
+                                <span className="text-slate-400 text-[11px]">Updated Value:</span>
+                                <span className="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px] truncate max-w-[120px]">
+                                  {trace.metadata.updated_value || 'null'}
+                                </span>
+                              </div>
+                            )}
+                            
+                            {trace.metadata.memory_intent === "LOOKUP" && (
+                              <div className="flex justify-between items-center mt-1">
+                                <span className="text-slate-400 text-[11px]">Lookup Value:</span>
+                                <span className="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px] truncate max-w-[120px]">
+                                  {trace.metadata.lookup_value || 'null'}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-slate-400 text-[11px]">Storage:</span>
+                              <span className="text-slate-300 font-mono text-[11px]">{trace.metadata.storage}</span>
+                            </div>
+                            
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-700/50">
+                              <span className="text-slate-400 text-[11px]">Execution Time:</span>
+                              <span className="text-slate-300 font-mono text-[11px]">{trace.metadata.execution_time_ms}ms</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
                       <div className="text-center text-slate-600">↓</div>
                       
                       <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
-                        <span className="text-slate-300">Business Keyword Match:</span>
-                        <span className={trace.metadata?.business_keyword_match === "YES" ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
-                          {trace.metadata?.business_keyword_match || "NO"}
-                        </span>
-                      </div>
-                      
-                      <div className="text-center text-slate-600">↓</div>
-                      
-                      <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
-                        <span className="text-slate-300">Meaningful Score:</span>
-                        <span className={parseFloat(trace.metadata?.meaningful_score || "0") < 60 && trace.metadata?.business_keyword_match !== "YES" ? "text-red-400 font-bold" : "text-emerald-400 font-bold"}>
-                          {trace.metadata?.meaningful_score || "N/A"}
+                        <span className="text-slate-300">Spell Corrections:</span>
+                        <span className={trace.metadata?.spell_correction?.corrections_count > 0 ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
+                          {trace.metadata?.spell_correction?.corrections_count || 0}
                         </span>
                       </div>
                       
@@ -252,22 +315,18 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                         </span>
                       </div>
                       
-                      {trace.metadata?.top_score && (
+                      {trace.metadata?.knowledge_search_decision === "EXECUTED" && (
                         <>
                           <div className="text-center text-slate-600">↓</div>
-                          <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
-                            <span className="text-slate-300">Top RAG Score:</span>
-                            <span className="text-blue-400 font-bold">{trace.metadata.top_score.toFixed(2)}</span>
-                          </div>
-                        </>
-                      )}
-                      
-                      {trace.metadata?.response_formatter_used && (
-                        <>
-                          <div className="text-center text-slate-600">↓</div>
-                          <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
-                            <span className="text-slate-300">Formatter Used:</span>
-                            <span className="text-emerald-400 font-bold">TRUE</span>
+                          <div className="flex flex-col gap-2 bg-slate-800/50 p-3 rounded border border-slate-700/50">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-300 font-semibold text-xs">Top RAG Score:</span>
+                              <span className="text-blue-400 font-bold">{trace.metadata.top_score?.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-400 text-[11px]">Retrieval Latency:</span>
+                              <span className="text-slate-300 text-[11px] font-mono">{trace.metadata.retrieval_latency_ms}ms</span>
+                            </div>
                           </div>
                         </>
                       )}

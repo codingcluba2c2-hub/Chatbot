@@ -14,9 +14,14 @@ import { DeveloperSidebar } from "@/components/dev/DeveloperSidebar";
 import { MemoryService } from "@/services/MemoryService";
 
 export default function Home() {
-  const [sessionId] = useState(() => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
-  const [conversationId] = useState(() => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
+  const [sessionId, setSessionId] = useState("");
+  const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState<MessageProps[]>([]);
+
+  useEffect(() => {
+    setSessionId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
+    setConversationId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
+  }, []);
   const [input, setInput] = useState("");
   const [botState, setBotState] = useState<'idle' | 'thinking' | 'typing'>('idle');
   const [backendStatus, setBackendStatus] = useState<'online' | 'offline'>('online');
@@ -174,7 +179,7 @@ export default function Home() {
         const botMessage: MessageProps = {
           id: Date.now().toString(),
           role: "bot",
-          content: data.response || "Sorry, I didn't understand that.",
+          content: data.response || "",
           intent: data.intent,
           timestamp: Date.now(),
           components: data.components,
@@ -258,7 +263,7 @@ export default function Home() {
       const botMessage: MessageProps = {
         id: Date.now().toString(),
         role: "bot",
-        content: data.response || "Sorry, I didn't understand that.",
+        content: data.response || "",
         intent: data.intent,
         timestamp: Date.now(),
         components: data.components,

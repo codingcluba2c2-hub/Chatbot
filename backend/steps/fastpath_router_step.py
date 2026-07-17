@@ -34,6 +34,10 @@ class FastPathRouterStep(PipelineStep):
                     metadata={"matched_key": fastpath_key, "phrase": phrase, "confidence": conf, "multi_intent": True}
                 )
             else:
+                greeting_prefix = context.metadata.get("greeting_prefix", "")
+                if greeting_prefix:
+                    response = f"{greeting_prefix}\n\n{response}"
+                    
                 # Stop the pipeline and return the exact configured response
                 return PipelineResult(
                     continue_pipeline=False,

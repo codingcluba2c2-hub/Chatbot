@@ -43,21 +43,30 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
           const isSkipped = step.status === 'skipped' || (!step.duration && step.decision === 'Continue' && !Object.keys(step.metadata || {}).length);
           
           if (mode === 'graph') {
+            const isMatched = step.metadata && Object.keys(step.metadata).some(k => k.endsWith('_detected') && step.metadata[k] === true);
+            let bgColor = 'bg-slate-800/80 border-slate-700'; // Default Gray (Skipped/Not Matched)
+            
+            if (isFailed) {
+              bgColor = 'bg-red-900/20 border-red-700/50';
+            } else if (step.decision === 'Stop') {
+              bgColor = 'bg-orange-900/20 border-orange-700/50 shadow-[0_0_15px_rgba(249,115,22,0.15)]';
+            } else if (isMatched || step.step_name === 'KnowledgeSearch' && step.metadata.knowledge_search_decision === 'EXECUTED') {
+              bgColor = 'bg-emerald-900/20 border-emerald-700/50';
+            } else if (step.duration > 0 && !isSkipped) {
+              bgColor = 'bg-blue-900/20 border-blue-700/50'; // Executed but didn't match/stop
+            }
+            
             return (
               <React.Fragment key={index}>
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className={`w-full max-w-sm rounded-lg border p-3 cursor-pointer transition-all ${
-                    isFailed ? 'bg-red-900/20 border-red-700/50' : 
-                    step.decision === 'Stop' ? 'bg-emerald-900/20 border-emerald-700/50 shadow-[0_0_15px_rgba(16,185,129,0.15)]' :
-                    'bg-slate-800/80 border-slate-700 hover:bg-slate-800'
-                  }`}
+                  className={`w-full max-w-sm rounded-lg border p-3 cursor-pointer transition-all hover:bg-slate-700 ${bgColor}`}
                   onClick={() => toggleExpand(index)}
                 >
                   <div className="flex justify-between items-center">
-                    <span className={`font-semibold text-sm ${step.decision === 'Stop' ? 'text-emerald-400' : 'text-slate-200'}`}>
+                    <span className={`font-semibold text-sm ${step.decision === 'Stop' ? 'text-orange-400' : (isMatched ? 'text-emerald-400' : 'text-slate-200')}`}>
                       {step.step_name}
                     </span>
                     <span className="text-xs font-mono text-slate-400">{step.duration}ms</span>

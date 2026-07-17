@@ -44,13 +44,13 @@ class Retriever:
             base_score = res.get("score", 0.0)
             text = res.get("payload", {}).get("content", "").lower()
             
-            # Simple keyword bonus
+            # Strong keyword bonus for exact matches
             bonus = 0.0
             for kw in keywords:
                 if len(kw) > 3 and kw in text:
-                    bonus += 0.05
+                    bonus += 0.15 # Stronger boost for exact keyword matches
                     
-            hybrid_score = base_score + min(bonus, 0.20)
+            hybrid_score = base_score + min(bonus, 0.45) # Higher max bonus
             
             rescored_results.append({
                 "id": res["id"],
@@ -72,7 +72,11 @@ class Retriever:
         else:
             highest_score = lowest_score = avg_score = 0.0
             
-        HARD_MIN_THRESHOLD = 0.40
+        HARD_MIN_THRESHOLD = 0.55
+        
+        # Lower threshold for short keyword queries
+        if len(expanded_query.split()) <= 3:
+            HARD_MIN_THRESHOLD = 0.40
             
         valid_chunks = [c for c in rescored_results if c["score"] >= HARD_MIN_THRESHOLD]
         

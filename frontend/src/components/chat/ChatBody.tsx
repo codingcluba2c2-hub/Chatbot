@@ -62,7 +62,7 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
             <div className="flex flex-col max-w-[75%] items-start -ml-1">
               <div className="relative px-4 py-3 text-[13px] md:text-[14px] xl:text-[15px] leading-relaxed break-words whitespace-pre-wrap transition-all duration-300 bg-white border border-gray-100 text-gray-800 rounded-[20px] rounded-bl-[4px] dark:bg-slate-800 dark:border-slate-700/60 dark:text-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
                 Hi, I am Mobiloitte's virtual agent.<br/>How can I help you today?
-                <div className="flex justify-end text-[0.65rem] text-gray-400 mt-2 font-medium">
+                <div className="flex justify-end text-[0.65rem] text-gray-400 mt-2 font-medium" suppressHydrationWarning>
                   {format(new Date(), 'h:mm a')}
                 </div>
               </div>

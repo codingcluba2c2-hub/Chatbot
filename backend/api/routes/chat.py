@@ -6,39 +6,27 @@ from pipeline.pipeline_runner import PipelineRunner
 from pipeline.pipeline_context import PipelineContext
 
 from steps.normalize_step import NormalizeStep
-from steps.conversation_intelligence_step import ConversationIntelligenceStep
-from steps.intent_normalization_step import IntentNormalizationStep
-from steps.conversation_opener_step import ConversationOpenerStep
-from steps.assistant_preference_step import AssistantPreferenceStep
-from steps.session_memory_step import SessionMemoryStep
-from steps.meaningful_validator_step import MeaningfulValidatorStep
-from steps.gibberish_step import GibberishStep
-from steps.farewell_step import FarewellStep
+from steps.greeting_step import GreetingFarewellStep
 from steps.fastpath_router_step import FastPathRouterStep
-from steps.knowledge_search_step import KnowledgeSearchStep
-from steps.response_formatter_step import ResponseFormatterStep
 from steps.faq_step import FAQStep
-from steps.llm_step import LLMStep
-from steps.fallback_step import FallbackStep
-from steps.semantic_cache_step import SemanticCacheStep
+from steps.memory_step import MemoryDetectorStep
+from steps.gibberish_step import GibberishStep
+from steps.meaningful_validator_step import MeaningfulValidatorStep
+from steps.spell_correction_step import SpellCorrectionStep
+from steps.knowledge_search_step import KnowledgeSearchStep
+from steps.response_generator_step import ResponseGeneratorStep
 
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
-pipeline_runner.register_step("ConversationIntelligence", ConversationIntelligenceStep())
-pipeline_runner.register_step("IntentNormalization", IntentNormalizationStep())
-pipeline_runner.register_step("ConversationOpener", ConversationOpenerStep())
-pipeline_runner.register_step("AssistantPreference", AssistantPreferenceStep())
-pipeline_runner.register_step("SessionMemory", SessionMemoryStep())
-pipeline_runner.register_step("Farewell", FarewellStep())
-pipeline_runner.register_step("MeaningfulValidator", MeaningfulValidatorStep())
-pipeline_runner.register_step("FastPathRouter", FastPathRouterStep())
+pipeline_runner.register_step("GreetingFarewell", GreetingFarewellStep())
+pipeline_runner.register_step("FastPath", FastPathRouterStep())
 pipeline_runner.register_step("FAQ", FAQStep())
-pipeline_runner.register_step("SemanticCache", SemanticCacheStep())
-pipeline_runner.register_step("KnowledgeSearch", KnowledgeSearchStep())
-pipeline_runner.register_step("ResponseFormatter", ResponseFormatterStep())
-pipeline_runner.register_step("LLM", LLMStep())
-pipeline_runner.register_step("Fallback", FallbackStep())
+pipeline_runner.register_step("Memory", MemoryDetectorStep())
 pipeline_runner.register_step("Gibberish", GibberishStep())
+pipeline_runner.register_step("MeaningfulValidator", MeaningfulValidatorStep())
+pipeline_runner.register_step("SpellCorrection", SpellCorrectionStep())
+pipeline_runner.register_step("KnowledgeSearch", KnowledgeSearchStep())
+pipeline_runner.register_step("ResponseGenerator", ResponseGeneratorStep())
 
 router = APIRouter()
 

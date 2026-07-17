@@ -8,8 +8,8 @@ def validate_query(text: str) -> dict:
     Validation to ensure query is not pure gibberish (keyboard mash, repeated chars, symbols).
     """
     # Bypass for known valid intents
-    is_greet, _, _, _ = detect_greeting(text)
-    is_fw, _, _, _ = detect_farewell(text)
+    is_greet, _, _, _, _ = detect_greeting(text)
+    is_fw, _, _, _, _ = detect_farewell(text)
     fp, _, _, _ = detect_fastpath(text)
     if is_greet or is_fw or fp:
         return {
@@ -62,6 +62,26 @@ def validate_query(text: str) -> dict:
 
     words = text_clean.split()
     
+    # Whitelist domain-specific keywords so they are never flagged as gibberish even if mispelled
+    # Some words might contain repeated chars or seem weird to basic heuristics
+    DOMAIN_KEYWORDS = [
+        "company", "leave", "holiday", "salary", "attendance", "contact", 
+        "owner", "mission", "vision", "technology", "react", "vite", 
+        "mongodb", "postgres", "frontend", "backend", "location", "address", 
+        "email", "phone", "services", "projects", "career", "jobs", "policy", 
+        "hr", "founder", "framework", "working", "hours", "total"
+    ]
+    
+    # If the text contains any of these domain keywords, consider it meaningful immediately
+    for keyword in DOMAIN_KEYWORDS:
+        if keyword in text_clean:
+            return {
+                "isMeaningful": True, 
+                "confidence": 1.0, 
+                "reason": f"Contains whitelisted domain keyword: {keyword}",
+                "metrics": {"meaningful_score": 100.0, "dictionary_match": 100.0}
+            }
+    
     # Check for words that are just consonants (and long enough to be keyboard mashing)
     long_gibberish_words = 0
     for word in words:
@@ -86,26 +106,15 @@ def validate_query(text: str) -> dict:
         }
     }
 
-def detect_greeting(text: str) -> Tuple[bool, str, float, str]:
+def detect_greeting(text: str) -> Tuple[bool, str, float, str, str]:
     """
-    Detects if the message is a greeting based on GreetingRepository.
-    Returns: (is_greeting, matched_pattern, confidence, response)
+    Detects if the message STARTS with a greeting based on GreetingRepository.
+    Returns: (is_greeting, matched_pattern, confidence, response, remaining_query)
     """
     greetings = greeting_repo.get_all(limit=1000)
-    text_lower = text.lower()
+    text_lower = text.lower().strip()
     
-    # 1. Try Custom Regex first
-    for g in greetings:
-        if getattr(g, "enabled", True):
-            regex = getattr(g, "regex", "")
-            if regex:
-                try:
-                    if re.search(regex, text, re.IGNORECASE):
-                        return True, getattr(g, "name", "Greeting"), 0.95, getattr(g, "response", "")
-                except Exception:
-                    pass
-                    
-    # 2. Sort by length descending to match longest phrases first
+    # Sort by length descending to match longest phrases first
     all_phrases = []
     for g in greetings:
         if not getattr(g, "enabled", True):
@@ -120,33 +129,25 @@ def detect_greeting(text: str) -> Tuple[bool, str, float, str]:
     all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
     
     for phrase_lower, match_str, response in all_phrases:
-        if phrase_lower and (phrase_lower in text_lower or text_lower in phrase_lower):
-            return True, match_str, 0.95, response
+        if phrase_lower and text_lower.startswith(phrase_lower):
+            # Extract remaining text after greeting
+            remaining_query = text_lower[len(phrase_lower):].strip()
+            # If there's punctuation like "Hi, company name", we should strip it
+            remaining_query = re.sub(r'^[^\w\s]+', '', remaining_query).strip()
             
-    # Fallback to some basic regex for common misspellings if needed, 
-    # but the prompt wants it managed from studio. So we stick to exact/partial match.
-    return False, "No greeting pattern matched", 0.0, ""
+            return True, match_str, 0.95, response, remaining_query
+            
+    return False, "No greeting pattern matched", 0.0, "", text
 
-def detect_farewell(text: str) -> Tuple[bool, str, float, str]:
+def detect_farewell(text: str) -> Tuple[bool, str, float, str, str]:
     """
-    Detects if the message is a farewell based on FarewellRepository.
-    Returns: (is_farewell, matched_pattern, confidence, response)
+    Detects if the message STARTS with a farewell based on FarewellRepository.
+    Returns: (is_farewell, matched_pattern, confidence, response, remaining_query)
     """
     farewells = farewell_repo.get_all(limit=1000)
-    text_lower = text.lower()
+    text_lower = text.lower().strip()
     
-    # 1. Try Custom Regex first
-    for f in farewells:
-        if getattr(f, "enabled", True):
-            regex = getattr(f, "regex", "")
-            if regex:
-                try:
-                    if re.search(regex, text, re.IGNORECASE):
-                        return True, getattr(f, "name", "Farewell"), 0.95, getattr(f, "response", "")
-                except Exception:
-                    pass
-                    
-    # 2. Sort by length descending to match longest phrases first
+    # Sort by length descending to match longest phrases first
     all_phrases = []
     for f in farewells:
         if not getattr(f, "enabled", True):
@@ -161,10 +162,14 @@ def detect_farewell(text: str) -> Tuple[bool, str, float, str]:
     all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
     
     for phrase_lower, match_str, response in all_phrases:
-        if phrase_lower and (phrase_lower in text_lower or text_lower in phrase_lower):
-            return True, match_str, 0.95, response
+        if phrase_lower and text_lower.startswith(phrase_lower):
+            # Extract remaining text
+            remaining_query = text_lower[len(phrase_lower):].strip()
+            remaining_query = re.sub(r'^[^\w\s]+', '', remaining_query).strip()
             
-    return False, "No farewell pattern matched", 0.0, ""
+            return True, match_str, 0.95, response, remaining_query
+            
+    return False, "No farewell pattern matched", 0.0, "", text
 
 def detect_fastpath(text: str) -> Tuple[Optional[str], str, float, str]:
     """
@@ -194,11 +199,12 @@ def detect_fastpath(text: str) -> Tuple[Optional[str], str, float, str]:
 
 def detect_faq(text: str) -> Tuple[bool, str, float, str]:
     """
-    Detects if the message matches an FAQ.
+    Detects if the message matches an FAQ using fuzzy string matching.
     Returns: (is_faq, matched_question, confidence, answer)
     """
+    from rapidfuzz import process, fuzz
     faqs = faq_repo.get_all(limit=1000)
-    text_lower = text.lower()
+    text_lower = text.lower().strip()
     
     all_phrases = []
     for f in faqs:
@@ -214,10 +220,27 @@ def detect_faq(text: str) -> Tuple[bool, str, float, str]:
             if alias:
                 all_phrases.append((alias.lower(), alias, ans))
                 
-    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
+    if not all_phrases:
+        return False, "No FAQ matched", 0.0, ""
+        
+    # We create a dictionary of phrase -> (original_phrase, answer)
+    phrase_dict = {p[0]: (p[1], p[2]) for p in all_phrases}
+    phrase_keys = list(phrase_dict.keys())
     
+    # 1. Check exact/substring match first for speed
+    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
     for phrase_lower, match_str, answer in all_phrases:
         if phrase_lower and (phrase_lower in text_lower or text_lower in phrase_lower):
-            return True, match_str, 0.90, answer
+            return True, match_str, 1.0, answer
+            
+    # 2. Use RapidFuzz for fuzzy matching (to handle Al vs ai typos)
+    # We use token_set_ratio or WRatio which is good for sentence similarity
+    result = process.extractOne(text_lower, phrase_keys, scorer=fuzz.token_set_ratio)
+    
+    if result:
+        match, score, index = result
+        if score >= 90: # 90% similarity threshold
+            original_phrase, answer = phrase_dict[match]
+            return True, original_phrase, score / 100.0, answer
             
     return False, "No FAQ matched", 0.0, ""
