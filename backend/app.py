@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     print("[OK] API Routes Registered")
     print("[OK] Server Ready")
     print("Backend running at:")
-    print("http://127.0.0.1:8000")
+    print("http://127.0.0.1:8001")
     print(f"Startup Time: {time.time() - t0:.2f} sec")
     print("----------------------------------------\n")
     yield
@@ -71,4 +71,4 @@ logger.info("FastAPI application initialized with modular AI pipeline")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=False)

@@ -10,7 +10,7 @@ export default function GreetingsPage() {
   const [formData, setFormData] = useState<any>({});
   
   const queryClient = useQueryClient();
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
   const apiUrl = `${backendUrl}/api/admin/greetings`;
 
   const { data, isLoading } = useQuery({

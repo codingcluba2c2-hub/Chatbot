@@ -14,7 +14,7 @@ import {
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#64748b'];
 
 export default function DashboardPage() {
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
   
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-overview"],

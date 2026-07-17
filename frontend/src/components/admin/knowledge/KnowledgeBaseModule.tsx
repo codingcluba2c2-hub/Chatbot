@@ -20,7 +20,7 @@ export const KnowledgeBaseModule = () => {
 
   useEffect(() => {
     if (selectedDoc && activeTab === "chunks") {
-       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
        fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc.id}/chunks`)
          .then(res => res.json())
          .then(setDocumentChunks)
@@ -32,7 +32,7 @@ export const KnowledgeBaseModule = () => {
     if (!retrievalQuery) return;
     setRetrievalLoading(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       const res = await fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc?.id}/retrieve?q=${encodeURIComponent(retrievalQuery)}`);
       if (!res.ok) {
         const errText = await res.text().catch(() => "Unknown error");
@@ -68,7 +68,7 @@ export const KnowledgeBaseModule = () => {
     if (!selectedDoc) return;
     setIsReprocessing(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       await fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc.id}/reprocess`, { method: "POST" });
       
       const res = await fetch(`${backendUrl}/api/knowledge/documents`);
@@ -88,7 +88,7 @@ export const KnowledgeBaseModule = () => {
   const handleSelectDoc = async (doc: any) => {
     setSelectedDoc(doc);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       const res = await fetch(`${backendUrl}/api/knowledge/documents/${doc.id}`);
       if (res.ok) {
         const fullDoc = await res.json();
@@ -102,7 +102,7 @@ export const KnowledgeBaseModule = () => {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       const res = await fetch(`${backendUrl}/api/knowledge/documents`);
       if(res.ok) {
         const data = await res.json();
@@ -124,7 +124,7 @@ export const KnowledgeBaseModule = () => {
     
     const interval = setInterval(async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
         const res = await fetch(`${backendUrl}/api/knowledge/documents`);
         if(res.ok) {
           const data = await res.json();
@@ -159,7 +159,7 @@ export const KnowledgeBaseModule = () => {
     
     try {
       setUploadProgress(40);
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
         method: "POST",
         body: formData,
@@ -184,7 +184,7 @@ export const KnowledgeBaseModule = () => {
   const handleDelete = async (id: string) => {
     if(!confirm("Are you sure you want to delete this document and all its chunks?")) return;
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       await fetch(`${backendUrl}/api/knowledge/documents/${id}`, { method: "DELETE" });
       fetchDocuments();
     } catch (e) {
@@ -435,35 +435,14 @@ export const KnowledgeBaseModule = () => {
                      <p className="text-sm text-slate-500">No chunks found or loading...</p>
                   ) : (
                     documentChunks.map(chunk => (
-                      <div key={chunk.id} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                        <div className="flex justify-between items-center mb-3">
-                           <div className="flex items-center gap-2">
-                             <span className="text-xs font-bold px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded">Chunk #{chunk.metadata.chunk_number}</span>
-                             {chunk.metadata.page_number && <span className="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300">Page {chunk.metadata.page_number}</span>}
-                             {chunk.metadata.section && <span className="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300">{chunk.metadata.section}</span>}
-                           </div>
-                           <span className="text-xs font-medium text-slate-500">{chunk.metadata.character_count} chars • ~{chunk.metadata.estimated_tokens} tokens</span>
+                      <div key={chunk.id} className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col gap-4">
+                        <div className="flex items-center pb-3 border-b border-slate-100 dark:border-slate-800">
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Chunk {chunk.metadata.chunk_number}</span>
                         </div>
                         
-                        {(chunk.metadata.first_sentence || chunk.metadata.last_sentence) && (
-                          <div className="mb-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-700/50 space-y-2">
-                            {chunk.metadata.first_sentence && (
-                              <div className="text-xs">
-                                <span className="font-semibold text-emerald-600 dark:text-emerald-400 mr-2">START:</span>
-                                <span className="text-slate-600 dark:text-slate-400 italic">"{chunk.metadata.first_sentence}"</span>
-                              </div>
-                            )}
-                            {chunk.metadata.last_sentence && (
-                              <div className="text-xs">
-                                <span className="font-semibold text-rose-600 dark:text-rose-400 mr-2">END:</span>
-                                <span className="text-slate-600 dark:text-slate-400 italic">"{chunk.metadata.last_sentence}"</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Full Content</div>
-                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{chunk.content}</p>
+                        <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-lg border border-slate-100 dark:border-slate-800 overflow-x-auto">
+                           <pre className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">{chunk.content}</pre>
+                        </div>
                       </div>
                     ))
                   )}
@@ -501,7 +480,7 @@ export const KnowledgeBaseModule = () => {
                          <button 
                            onClick={async () => {
                              try {
-                               const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                               const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
                                const fetchId = res.payload.chunk_id || res.id;
                                const response = await fetch(`${backendUrl}/api/knowledge/chunks/${fetchId}/embedding`);
                                if (response.ok) {

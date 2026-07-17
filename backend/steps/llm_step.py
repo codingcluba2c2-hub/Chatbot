@@ -47,16 +47,20 @@ class LLMStep(PipelineStep):
             detail_instruction = "Provide a detailed, well-structured answer based strictly on the context."
 
         system_prompt = (
-            "You are a strict enterprise AI assistant. "
-            "You MUST answer ONLY using the provided context. "
-            "Do not add external knowledge. "
-            "If the answer is not contained in the context, reply: "
-            "'I don't have information about this in the current knowledge base.'\n"
-            f"{detail_instruction}\n\n"
+            "You are a Senior AI Assistant, modeled after ChatGPT. "
+            "Your goal is to provide natural, professional, and friendly responses.\n\n"
+            "RULES:\n"
+            "1. Answer strictly using the provided knowledge base context.\n"
+            "2. If the answer is not in the context, reply exactly: 'I couldn't find this information in the available knowledge base.' Never hallucinate or invent answers.\n"
+            "3. Format your response beautifully using Markdown. Use appropriate ## Headings, - Bullet lists, 1. Numbered lists, and | Tables | when applicable.\n"
+            "4. Bold **important terms**.\n"
+            "5. Preserve code formatting, URLs, email addresses, and phone numbers exactly as they appear.\n"
+            "6. Synthesize information intelligently if it appears in multiple chunks. Do not repeat yourself.\n"
+            "7. Ensure proper punctuation, capitalization, and readability. Do not sound robotic.\n\n"
         )
         if rag_context:
-            system_prompt += f"Context:\n{rag_context}"
-        
+            system_prompt += f"KNOWLEDGE BASE CONTEXT:\n{rag_context}\n\n"
+            
         t0 = time.time()
         # 1. Initialize Provider
         llm = get_llm_provider()

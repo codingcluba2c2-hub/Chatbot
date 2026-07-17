@@ -1,7 +1,7 @@
 import time
 from typing import List, Dict, Any
+from .response_builder import ContextResponseBuilder, RAGResponseBuilder
 from .answer_compressor import AnswerCompressor
-from .enterprise_formatter import EnterpriseFormatter
 
 class LocalResponseGenerator:
     @staticmethod
@@ -13,11 +13,11 @@ class LocalResponseGenerator:
         sentences = compression_result["sentences"]
         metrics = compression_result["metrics"]
         
-        # 2. Enterprise Formatting
+        # 2. Formatting
         if not sentences:
             formatted_response = "I couldn't find enough relevant information in the knowledge base to answer that."
         else:
-            formatted_response = EnterpriseFormatter.format_response(query, sentences)
+            formatted_response = "\n".join(sentences)
             
         t1 = time.time()
         processing_time_ms = int((t1 - t0) * 1000)

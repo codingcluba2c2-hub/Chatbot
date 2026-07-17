@@ -69,7 +69,7 @@ export default function Home() {
   }, [isChatOpen]);
 
   const ensureBackend = async () => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
     try {
       await fetch(`${backendUrl}/`, { method: "GET" }).catch(() => {});
       if (backendStatus === 'offline') setBackendStatus('online');
@@ -97,7 +97,7 @@ export default function Home() {
 
   const handleClearChat = useCallback(async () => {
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       await fetch(`${backendUrl}/api/session/clear?session_id=${sessionId}`, { method: 'DELETE' });
     } catch (e) {
       console.error("Failed to clear backend session:", e);
@@ -136,7 +136,7 @@ export default function Home() {
         );
       }, 0);
 
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       const backendReady = await ensureBackend();
       if (!backendReady) throw new Error("Backend not available after waiting");
 
@@ -232,7 +232,7 @@ export default function Home() {
     setBotState('thinking');
     
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
       const backendReady = await ensureBackend();
       if (!backendReady) throw new Error("Backend not available after waiting");
 

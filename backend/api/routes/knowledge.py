@@ -71,11 +71,8 @@ def process_document_bg(doc_id: str, file_path: str, file_type: str):
         doc = update_doc_status(doc_id, "chunking", stats)
         t0 = time.time()
         chunks_data = ChunkingEngine.chunk_text(
-            text, 
-            document_id=doc_id, 
-            strategy=settings.chunk_strategy,
-            max_chars=settings.chunk_size,
-            overlap=settings.chunk_overlap
+            raw_text, 
+            document_id=doc_id
         )
         
         if not chunks_data:

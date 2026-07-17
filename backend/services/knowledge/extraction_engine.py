@@ -1,104 +1,168 @@
 import os
-import io
 import re
 import unicodedata
-from typing import Tuple, Dict
-from core.logger import get_logger
+from typing import Tuple, Dict, List, Any
 
-logger = get_logger(__name__)
-
-class ExtractionEngine:
+class ContentNormalizer:
     @staticmethod
-    def clean_text(text: str) -> str:
-        # 1. Unicode Normalization
+    def normalize(text: str) -> str:
         text = unicodedata.normalize("NFKC", text)
-        
-        # 2. Control Character Removal
         text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
         
-        # 3. Header/Footer/Page Number Removal
-        # e.g. "Page 1 of 10", "Confidential", etc.
-        text = re.sub(r'(?im)^page\s+\d+(\s+of\s+\d+)?\s*$', '', text)
-        text = re.sub(r'(?im)^confidential\s*$', '', text)
-        text = re.sub(r'(?im)^\d+\s*\|\s*page\s*$', '', text)
+        # Remove PDF artifacts
+        text = re.sub(r'(?im)^\s*page\s+\d+(\s+of\s+\d+)?\s*$', '', text)
+        text = re.sub(r'(?i)https?://[^\s]+', '', text)
+        text = re.sub(r'(?i)about:blank', '', text)
+        text = re.sub(r'(?i)^\s*Print\s*$', '', text)
         
-        # 4. Hyphenated Word Repair
-        # e.g., "appli- \ncation" -> "application"
-        text = re.sub(r'([a-zA-Z]+)-\s*\n\s*([a-zA-Z]+)', r'\1\2', text)
+        # Remove excessive spaces
+        text = re.sub(r'[ \t]{2,}', ' ', text)
         
-        # 5. Wrapped Line Repair
-        # If line ends with word char/comma and next starts with lower case
-        text = re.sub(r'([a-zA-Z0-9,])[ \t]*\n[ \t]*([a-z])', r'\1 \2', text)
-        
-        # 6. Paragraph Reconstruction
-        # If line ends with period/question/exclamation, it might be end of paragraph. Ensure double newline.
-        text = re.sub(r'([.!?])[ \t]*\n[ \t]*([A-Z])', r'\1\n\n\2', text)
-        
-        # 7. Remove Empty Lines and Extra Whitespace
-        # Merge multiple newlines into two to preserve paragraph structure
+        # Merge wrapped lines (stitch sentences broken in middle)
+        blocks = re.split(r'\n{2,}', text)
+        cleaned_blocks = []
+        for block in blocks:
+            if '|' in block:
+                cleaned_blocks.append(block.strip())
+                continue
+                
+            lines = block.split('\n')
+            stitched_lines = []
+            for line in lines:
+                line = line.strip()
+                if not line: continue
+                
+                if not stitched_lines:
+                    stitched_lines.append(line)
+                    continue
+                    
+                prev = stitched_lines[-1]
+                if not re.search(r'[.:?!]$', prev) and not re.match(r'^[\*\-•\d+]\s', line) and not line.startswith('|'):
+                    stitched_lines[-1] = prev + " " + line
+                else:
+                    stitched_lines.append(line)
+            cleaned_blocks.append('\n'.join(stitched_lines))
+            
+        text = '\n\n'.join(cleaned_blocks)
         text = re.sub(r'\n{3,}', '\n\n', text)
-        # Clean trailing/leading spaces on lines
-        text = '\n'.join([line.strip() for line in text.split('\n')])
-        
-        # 8. Remove extra spaces between words
-        text = re.sub(r'[ \t]+', ' ', text)
-        
         return text.strip()
 
+class BulletNormalizer:
+    @staticmethod
+    def normalize(text: str) -> str:
+        # Pull orphan labels like "Mission:" into bullets
+        lines = text.split('\n')
+        normalized_lines = []
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.endswith(':') and len(line.split()) <= 4 and not line.startswith(('•', '*', '-')):
+                # Look ahead for content
+                j = i + 1
+                next_content = ""
+                while j < len(lines):
+                    next_line = lines[j].strip()
+                    if next_line:
+                        next_content = next_line
+                        break
+                    j += 1
+                
+                if next_content and not re.match(r'^(?:#{1,6}\s+|\d+(?:\.\d+)*\.\s+|[A-Z].*:)', next_content) and not next_content.startswith('|'):
+                    normalized_lines.append(f"• {line} {next_content}")
+                    i = j + 1
+                    continue
+            normalized_lines.append(lines[i])
+            i += 1
+        return '\n'.join(normalized_lines)
+
+class TableNormalizer:
+    @staticmethod
+    def extract_from_pdf(page) -> str:
+        text = ""
+        tables = page.extract_tables()
+        for table in tables:
+            if table:
+                text += "\n\n"
+                for row_idx, row in enumerate(table):
+                    clean_row = [str(cell).replace('\n', ' ').strip() if cell is not None else "" for cell in row]
+                    text += "| " + " | ".join(clean_row) + " |\n"
+                    if row_idx == 0:
+                        text += "|" + "|".join(["---"] * len(clean_row)) + "|\n"
+                text += "\n\n"
+        return text
+
+class PDFLayoutParser:
+    @staticmethod
+    def parse(file_path: str) -> str:
+        try:
+            import pdfplumber
+        except ImportError:
+            raise RuntimeError("pdfplumber not installed.")
+            
+        text = ""
+        with pdfplumber.open(file_path) as pdf:
+            for i, page in enumerate(pdf.pages):
+                page_text = page.extract_text()
+                if page_text:
+                    text += f"\n\n__PAGE_BOUNDARY_{i+1}__\n\n"
+                    text += page_text + "\n"
+                
+                text += TableNormalizer.extract_from_pdf(page)
+        return text
+
+class ExtractionEngine:
     @staticmethod
     def extract_text(file_path: str, file_type: str) -> Tuple[str, str, Dict[str, int]]:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
             
         ext = file_type.lower()
-        text = ""
+        raw_text = ""
         
         if ext in ['txt', 'md', 'csv']:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                text = f.read()
+                raw_text = f.read()
         elif ext == 'pdf':
-            try:
-                import PyPDF2
-                with open(file_path, 'rb') as f:
-                    reader = PyPDF2.PdfReader(f)
-                    for i, page in enumerate(reader.pages):
-                        page_text = page.extract_text()
-                        if page_text:
-                            text += f"\n\n__PAGE_BOUNDARY_{i+1}__\n\n"
-                            text += page_text + "\n"
-            except ImportError:
-                raise RuntimeError("PyPDF2 not installed. Cannot extract PDF.")
+            raw_text = PDFLayoutParser.parse(file_path)
         elif ext == 'docx':
             try:
                 import docx
                 doc = docx.Document(file_path)
-                text = "\n".join([p.text for p in doc.paragraphs])
+                text_parts = []
+                for element in doc.element.body:
+                    if element.tag.endswith('p'):
+                        p = docx.text.paragraph.Paragraph(element, doc)
+                        text_parts.append(p.text)
+                    elif element.tag.endswith('tbl'):
+                        t = docx.table.Table(element, doc)
+                        for row_idx, row in enumerate(t.rows):
+                            row_text = [cell.text.replace('\n', ' ').strip() for cell in row.cells]
+                            text_parts.append("| " + " | ".join(row_text) + " |")
+                            if row_idx == 0:
+                                text_parts.append("|" + "|".join(["---"] * len(row.cells)) + "|")
+                        text_parts.append("\n")
+                raw_text = "\n\n".join(text_parts)
             except ImportError:
-                raise RuntimeError("python-docx not installed. Cannot extract DOCX.")
+                raise RuntimeError("python-docx not installed.")
         else:
             raise ValueError(f"Unsupported file type: {ext}")
             
-        # If extraction is completely blank
-        if not text.strip():
-            raise ValueError("Extracted text is empty. Document may be an image or corrupted.")
+        if not raw_text.strip():
+            raise ValueError("Extracted text is empty.")
             
-        # Clean text
-        cleaned_text = ExtractionEngine.clean_text(text)
+        # Pipeline normalization
+        cleaned_text = ContentNormalizer.normalize(raw_text)
+        cleaned_text = BulletNormalizer.normalize(cleaned_text)
         
-        # If text is empty after cleaning
-        if not cleaned_text.strip():
-            raise ValueError("Extracted text is empty after cleaning.")
-            
-        # Calculate stats
-        char_count = len(cleaned_text)
-        words = cleaned_text.split()
-        word_count = len(words)
-        paragraphs = [p for p in cleaned_text.split('\n\n') if p.strip()]
+        # Separate blocks cleanly with double newlines
+        cleaned_text = re.sub(r'([^\n])\n([\*\-•])', r'\1\n\n\2', cleaned_text)
+        cleaned_text = re.sub(r'([^\n])\n(#{1,6}\s+|\d+\.\d*\s+)', r'\1\n\n\2', cleaned_text)
+        cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
         
         stats = {
-            "characters": char_count,
-            "words": word_count,
-            "paragraphs": len(paragraphs)
+            "characters": len(cleaned_text),
+            "words": len(cleaned_text.split()),
+            "paragraphs": len([p for p in cleaned_text.split('\n\n') if p.strip()])
         }
         
-        return text, cleaned_text, stats
+        return raw_text, cleaned_text, stats
