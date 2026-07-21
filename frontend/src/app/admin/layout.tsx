@@ -16,18 +16,18 @@ import {
   Search,
   Cpu,
   PanelRightClose,
-  PanelRightOpen
+  PanelRightOpen,
+  Network
 } from "lucide-react";
 import { useState } from "react";
 import { DeveloperPreview } from "@/components/admin/DeveloperPreview";
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-  { name: "Greetings", href: "/admin/greetings", icon: Hand },
-  { name: "Farewells", href: "/admin/farewells", icon: MessageSquare },
-  { name: "FAQs", href: "/admin/faqs", icon: HelpCircle },
-  { name: "FastPaths", href: "/admin/fastpaths", icon: Zap },
+  { name: "Conversations", href: "/admin/conversations", icon: MessageSquare },
+  { name: "Quick Replies", href: "/admin/quick-replies", icon: Zap },
   { name: "Knowledge Base", href: "/admin/knowledge", icon: Database },
+  { name: "Knowledge Tree", href: "/admin/knowledge-tree", icon: Network },
   { name: "Knowledge Settings", href: "/admin/settings", icon: Wrench },
 ];
 

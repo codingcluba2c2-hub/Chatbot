@@ -48,3 +48,24 @@ class KnowledgeSettingsDB(Base):
     similarity_threshold = Column(Float, default=0.75)
     top_k = Column(Integer, default=5)
     updated_at = Column(Float)
+
+class KnowledgeNodeDB(Base):
+    __tablename__ = "knowledge_nodes"
+    
+    id = Column(String, primary_key=True, index=True)
+    parent_id = Column(String, nullable=True, index=True)
+    title = Column(String)
+    slug = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    response_markdown = Column(String, nullable=True)
+    node_type = Column(String, default="standard")
+    icon = Column(String, nullable=True)
+    image = Column(String, nullable=True)
+    priority = Column(Integer, default=1)
+    sort_order = Column(Integer, default=1)
+    status = Column(String, default="active")
+    aliases = Column(JSON, default=list)
+    created_at = Column(Float)
+    updated_at = Column(Float)
+    created_by = Column(String, default="system")
+    updated_by = Column(String, default="system")

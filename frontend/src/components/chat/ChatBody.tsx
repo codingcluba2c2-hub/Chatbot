@@ -55,14 +55,14 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
         <div className="flex-1 flex flex-col justify-start pt-2 w-full relative z-10">
           
           {/* Initial Welcome Message matching screenshot */}
-          <div className="flex w-full mb-8 space-x-3 justify-start">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-blue-600 mt-auto z-10 border border-gray-100 dark:border-slate-800">
+          <div className="flex w-full mb-8 space-x-4 justify-start">
+            <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 shadow-md flex items-center justify-center text-white mt-1 z-10 border border-blue-500/30">
               <span className="font-bold text-lg italic tracking-tighter" style={{ fontFamily: 'Georgia, serif' }}>M</span>
             </div>
-            <div className="flex flex-col max-w-[75%] items-start -ml-1">
-              <div className="relative px-4 py-3 text-[13px] md:text-[14px] xl:text-[15px] leading-relaxed break-words whitespace-pre-wrap transition-all duration-300 bg-white border border-gray-100 text-gray-800 rounded-[20px] rounded-bl-[4px] dark:bg-slate-800 dark:border-slate-700/60 dark:text-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+            <div className="flex flex-col max-w-[80%] items-start">
+              <div className="relative px-5 py-4 text-[14px] md:text-[15px] xl:text-[16px] leading-relaxed break-words whitespace-pre-wrap transition-all duration-300 bg-white border border-gray-200/60 text-gray-800 rounded-2xl rounded-tl-sm dark:bg-[#1E293B] dark:border-slate-700/50 dark:text-gray-100 shadow-sm hover:shadow-md">
                 Hi, I am Mobiloitte's virtual agent.<br/>How can I help you today?
-                <div className="flex justify-end text-[0.65rem] text-gray-400 mt-2 font-medium" suppressHydrationWarning>
+                <div className="flex justify-end text-[0.7rem] text-gray-400 dark:text-gray-500 mt-2 font-medium tracking-wide" suppressHydrationWarning>
                   {format(new Date(), 'h:mm a')}
                 </div>
               </div>

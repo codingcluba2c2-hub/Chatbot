@@ -38,3 +38,4 @@ python-docx
 pgvector
 google-genai
 sentence-transformers  
+qdrant-client

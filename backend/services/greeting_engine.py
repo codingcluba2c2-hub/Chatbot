@@ -16,9 +16,9 @@ class GreetingEngine:
     # 2. Response Templates
     TEMPLATES = {
         "GENERAL": [
-            "Hello! How can I help you today?", "Hi there!", "Hey!", "Nice to see you!",
-            "Welcome!", "Hello again!", "Hey again!", "Hi 😊How can I help you today?", "Greetings!",
-            "Hi! How can I assist you?", "Good to see you!", "Hello 👋", "Hey 👋",
+            "Hello! How can I help you today?", "Hi there!", "Nice to see you!",
+            "Hello again!", "Hey again!", "Hi 😊How can I help you today?",
+            "Hi! How can I assist you?", "Good to see you!",
             "How can I help you today?", "What can I do for you?"
         ],
         "MORNING": [
@@ -126,12 +126,7 @@ class GreetingEngine:
         # 5. Template Selection
         selected_template = ""
         
-        if count > 1:
-            # Loop detection
-            idx = min(count - 2, len(self.REPEATS) - 1)
-            selected_template = self.REPEATS[idx]
-            
-        elif detected_bucket != "GENERAL" and detected_bucket != server_bucket:
+        if detected_bucket != "GENERAL" and detected_bucket != server_bucket:
             # Time Mismatch Handling
             if detected_bucket == "MORNING":
                 if server_bucket in ["EVENING", "NIGHT"]:

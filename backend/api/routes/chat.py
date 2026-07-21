@@ -14,11 +14,13 @@ from steps.gibberish_step import GibberishStep
 from steps.meaningful_validator_step import MeaningfulValidatorStep
 from steps.spell_correction_step import SpellCorrectionStep
 from steps.knowledge_search_step import KnowledgeSearchStep
+from steps.knowledge_tree_step import KnowledgeTreeStep
 from steps.response_generator_step import ResponseGeneratorStep
 
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
 pipeline_runner.register_step("GreetingFarewell", GreetingFarewellStep())
+pipeline_runner.register_step("KnowledgeTree", KnowledgeTreeStep())
 pipeline_runner.register_step("FastPath", FastPathRouterStep())
 pipeline_runner.register_step("FAQ", FAQStep())
 pipeline_runner.register_step("Memory", MemoryDetectorStep())

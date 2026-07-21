@@ -12,7 +12,7 @@ interface DeveloperSidebarProps {
 }
 
 export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onClose, messages, selectedMessageId }) => {
-  const [activeTab, setActiveTab] = useState<'timeline' | 'network' | 'performance' | 'pipeline' | 'memory' | 'logs' | 'routing'>('pipeline');
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'routing' | 'logs'>('pipeline');
 
   // Find the selected message trace, or default to the latest bot message
   let selectedMessage = messages.find(m => m.id === selectedMessageId);
@@ -36,13 +36,9 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
   const trace = botMessage?.trace;
 
   const tabs = [
-    { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
-    { id: 'routing', label: 'Routing', icon: Layers },
-    { id: 'network', label: 'Network', icon: Network },
-    { id: 'timeline', label: 'Timeline', icon: Activity },
-    { id: 'memory', label: 'Memory', icon: Database },
-    { id: 'logs', label: 'Logs', icon: Terminal },
-    { id: 'performance', label: 'Performance', icon: Clock },
+    { id: 'pipeline', label: 'Pipeline Graph', icon: GitBranch },
+    { id: 'routing', label: 'Agent Routing', icon: Layers },
+    { id: 'logs', label: 'System Logs', icon: Terminal }
   ];
 
   return (
@@ -64,7 +60,12 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
               </h2>
               <div className="flex items-center gap-3 text-xs text-slate-400">
                 <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Backend Online</span>
-                {trace && <span>Latency: {trace.totalBackendTimeMs}ms</span>}
+                {trace && <span>Total Latency: {trace.totalBackendTimeMs}ms</span>}
+                {trace?.metadata?.gemini_used && trace?.metadata?.llm_latency_ms && (
+                  <span className="text-purple-400 font-semibold border-l border-slate-700 pl-3">
+                    LLM Time: {trace.metadata.llm_latency_ms}ms
+                  </span>
+                )}
               </div>
             </div>
             <button onClick={onClose} className="p-1 hover:bg-slate-800 rounded-md transition-colors text-slate-400 hover:text-white">
@@ -103,68 +104,6 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
             ) : (
               <div className="h-full">
                 {activeTab === 'pipeline' && <PipelineTimeline trace={trace} mode="graph" />}
-                {activeTab === 'timeline' && <PipelineTimeline trace={trace} mode="timeline" />}
-                {activeTab === 'network' && (
-                  <div className="space-y-4">
-                    <div className="font-mono text-xs p-3 rounded-md bg-slate-900 border border-slate-800 overflow-x-auto">
-                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-800">
-                        <span className="text-blue-300 font-bold">POST /api/chat</span>
-                        <span className="text-emerald-400">200 OK</span>
-                      </div>
-                      <div className="mt-2 text-slate-400 uppercase tracking-widest text-[10px]">Headers</div>
-                      <pre className="text-slate-300 ml-2 mt-1">Content-Type: application/json</pre>
-                      <div className="mt-4 text-slate-400 uppercase tracking-widest text-[10px]">Request Payload</div>
-                      <pre className="text-amber-300 mt-1 bg-slate-950 p-2 rounded">
-                        {JSON.stringify({ message: selectedMessage?.content || "" }, null, 2)}
-                      </pre>
-                      <div className="mt-4 text-slate-400 uppercase tracking-widest text-[10px]">Response Payload</div>
-                      <pre className="text-emerald-300 mt-1 bg-slate-950 p-2 rounded">
-                        {JSON.stringify({ intent: botMessage?.intent, response: botMessage?.content }, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-                {activeTab === 'performance' && (
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-md bg-slate-900 border border-slate-800">
-                      <h4 className="text-xs font-semibold text-slate-400 mb-4 uppercase tracking-wider">Timing Breakdown</h4>
-                      <div className="space-y-3 text-sm font-mono">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex justify-between items-center text-slate-300">
-                            <span>Backend Time</span>
-                            <span className="text-blue-400">{trace.totalBackendTimeMs} ms</span>
-                          </div>
-                          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-blue-500 h-full" style={{ width: '100%' }}></div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-1 opacity-70">
-                          <div className="flex justify-between items-center text-slate-300">
-                            <span>Network Latency</span>
-                            <span className="text-amber-400">~{Math.round(trace.totalBackendTimeMs * 1.5)} ms</span>
-                          </div>
-                          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-amber-500 h-full" style={{ width: '60%' }}></div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {activeTab === 'memory' && (
-                  <div className="font-mono text-xs p-3 rounded-md bg-slate-900 border border-slate-800">
-                    <div className="text-slate-400 uppercase tracking-widest text-[10px] mb-2">Session Facts & Entities</div>
-                    <p className="text-slate-500 mb-4 italic">Memory state extracted during this turn:</p>
-                    {trace.steps.filter((s:any) => s.step_name === 'Memory' || s.step_name === 'Regex').map((s:any, idx:number) => (
-                      <div key={idx} className="mb-4">
-                        <span className="text-emerald-400">[{s.step_name}]</span>
-                        <pre className="text-amber-300 mt-1 bg-slate-950 p-2 rounded">
-                          {JSON.stringify(s.output?.entities || {}, null, 2)}
-                        </pre>
-                      </div>
-                    ))}
-                  </div>
-                )}
                 {activeTab === 'logs' && (
                   <div className="font-mono text-[11px] p-3 rounded-md bg-slate-900 border border-slate-800 space-y-1">
                     {trace.steps.map((s:any, idx:number) => (
@@ -338,7 +277,7 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                             <div className="flex justify-between items-center">
                               <span className="text-slate-300 font-semibold text-xs">LLM Engine:</span>
                               <span className={trace.metadata?.gemini_used ? "text-purple-400 font-bold" : "text-amber-400 font-bold"}>
-                                {trace.metadata?.gemini_used ? "Gemini 1.5" : "Deterministic Fallback"}
+                                {trace.metadata?.gemini_used ? "Groq Llama 3.1" : "Deterministic Fallback"}
                               </span>
                             </div>
                             <div className="flex justify-between items-center">

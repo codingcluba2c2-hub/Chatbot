@@ -473,7 +473,18 @@ export const KnowledgeBaseModule = () => {
                     {retrievalResults.map((res, i) => (
                        <div key={i} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                          <div className="flex justify-between items-center mb-2">
-                           <span className="text-xs font-semibold px-2 py-1 bg-blue-100 text-blue-700 rounded">Match #{i+1}</span>
+                           <div>
+                             <span className="text-xs font-semibold px-2 py-1 bg-blue-100 text-blue-700 rounded">Match #{i+1}</span>
+                             {(() => {
+                               const matchChunk = documentChunks.find((c:any) => c.id === (res.payload?.chunk_id || res.id));
+                               const chunkNum = matchChunk?.chunk_number || matchChunk?.metadata?.chunk_number;
+                               return chunkNum ? (
+                                 <span className="text-xs font-semibold px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded ml-2">
+                                   Chunk #{chunkNum}
+                                 </span>
+                               ) : null;
+                             })()}
+                           </div>
                            <span className="text-xs font-semibold text-emerald-600">Score: {res.score.toFixed(3)}</span>
                          </div>
                          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed mb-3">{res.payload.content}</p>

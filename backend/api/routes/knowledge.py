@@ -253,10 +253,14 @@ def retrieve_from_document(doc_id: str, q: str, top_k: int = 3):
     if not q:
         raise HTTPException(400, "Query parameter 'q' is required")
         
-    query_embedding = get_embedding_provider().embed_query(q)
-    # Search qdrant, filtering by document_id
-    results = get_vector_store().search(query_embedding, top_k=top_k, filter_dict={"document_id": doc_id})
-    return {"query": q, "results": results}
+    from services.rag.retriever import get_retriever
+    
+    # Use full hybrid retrieval pipeline instead of just raw dense vector search
+    retriever = get_retriever()
+    results = retriever.retrieve(q, top_k=top_k, filter_dict={"document_id": doc_id})
+    
+    # results["accepted"] contains the actual matched chunks
+    return {"query": q, "results": results.get("accepted", [])}
 
 @router.get("/documents/{doc_id}/embeddings")
 def get_document_embeddings(doc_id: str):

@@ -12,7 +12,8 @@ engine = create_engine(
         "keepalives": 1,
         "keepalives_idle": 30,
         "keepalives_interval": 10,
-        "keepalives_count": 5
+        "keepalives_count": 5,
+        "connect_timeout": 30
     }
 )
 from sqlalchemy import event

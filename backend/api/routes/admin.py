@@ -105,3 +105,7 @@ create_crud_routes(router, greeting_repo, Greeting, "greetings", pre_save_hook=g
 create_crud_routes(router, farewell_repo, Farewell, "farewells", pre_save_hook=generate_greeting_regex)
 create_crud_routes(router, faq_repo, FAQ, "faqs")
 create_crud_routes(router, fastpath_repo, FastPath, "fastpaths")
+
+from repositories.registry import knowledge_node_repo
+from schemas.knowledge import KnowledgeNode
+create_crud_routes(router, knowledge_node_repo, KnowledgeNode, "knowledge_nodes")

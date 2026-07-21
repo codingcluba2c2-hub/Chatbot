@@ -4,12 +4,12 @@ from repositories.memory_repository import ConversationRepository, MessageReposi
 from schemas.admin import (
     Greeting, Farewell, FAQ, FastPath, AuditLog
 )
-from schemas.knowledge import KnowledgeDocument, DocumentChunk, KnowledgeSettings
+from schemas.knowledge import KnowledgeDocument, DocumentChunk, KnowledgeSettings, KnowledgeNode
 
 from models.admin import (
     GreetingDB, FarewellDB, FAQDB, FastPathDB, AuditLogDB
 )
-from models.knowledge import KnowledgeDocumentDB, DocumentChunkDB, KnowledgeSettingsDB
+from models.knowledge import KnowledgeDocumentDB, DocumentChunkDB, KnowledgeSettingsDB, KnowledgeNodeDB
 from models.memory import ConversationDB, MessageDB, MemoryFactDB
 
 class AuditLogRepository(BaseRepository[AuditLog, AuditLogDB]):
@@ -34,6 +34,9 @@ class ChunkRepository(BaseRepository[DocumentChunk, DocumentChunkDB]):
     pass
 
 class KnowledgeSettingsRepository(BaseRepository[KnowledgeSettings, KnowledgeSettingsDB]):
+    pass
+
+class KnowledgeNodeRepository(BaseRepository[KnowledgeNode, KnowledgeNodeDB]):
     pass
 
 _instances = {}
@@ -62,6 +65,8 @@ def _get_repo(name: str):
             _instances[name] = MessageRepository()
         elif name == "fact_repo":
             _instances[name] = FactRepository()
+        elif name == "knowledge_node_repo":
+            _instances[name] = KnowledgeNodeRepository(KnowledgeNode, KnowledgeNodeDB)
         else:
             raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     return _instances[name]
@@ -69,7 +74,7 @@ def _get_repo(name: str):
 def __getattr__(name):
     if name in ["audit_repo", "greeting_repo", "farewell_repo", "faq_repo", 
                 "fastpath_repo", "document_repo", "chunk_repo", "settings_repo", 
-                "conversation_repo", "message_repo", "fact_repo"]:
+                "conversation_repo", "message_repo", "fact_repo", "knowledge_node_repo"]:
         return _get_repo(name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

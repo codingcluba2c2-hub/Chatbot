@@ -34,7 +34,7 @@ class ResponseGeneratorStep(PipelineStep):
             elif "tech" in text_lower or "software" in text_lower or "react" in text_lower or "node" in text_lower:
                 suggestions = ["AI Services", "React", "Node.js", "Cloud", "Projects"]
             elif "company" in text_lower or "about" in text_lower or "founder" in text_lower:
-                suggestions = ["Founder", "Mission", "Vision", "Services", "Contact"]
+                suggestions = ["Founder", "Mission", "Vision", "Services", "Contact", "company about"]
             else:
                 suggestions = ["Overview", "Office Timings", "Leave Policy", "Contact", "Services", "Career", "Help"]
                 
@@ -92,11 +92,20 @@ class ResponseGeneratorStep(PipelineStep):
             )
             
             try:
-                final_response = provider.generate_response(
-                    system_prompt=system_prompt,
-                    user_message=context.normalized_message,
-                    context=filtered_context
-                )
+                prompt = f"User Question: {context.normalized_message}\n\nContext Data:\n{filtered_context}"
+                config = {
+                    "system_prompt": system_prompt,
+                    "temperature": 0.2
+                }
+                
+                result = provider.generate(prompt, config)
+                
+                import json
+                try:
+                    res_data = json.loads(result.text)
+                    final_response = res_data.get("response", result.text)
+                except:
+                    final_response = result.text
                 final_intent = "Knowledge"
                 gemini_success = True
                 

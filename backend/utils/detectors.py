@@ -244,3 +244,51 @@ def detect_faq(text: str) -> Tuple[bool, str, float, str]:
             return True, original_phrase, score / 100.0, answer
             
     return False, "No FAQ matched", 0.0, ""
+
+def detect_knowledge_tree(text: str) -> Tuple[bool, str, float, str, str]:
+    """
+    Detects if the message matches a Knowledge Tree node.
+    Returns: (is_matched, matched_node_title, confidence, response_markdown, node_id)
+    """
+    from repositories.registry import knowledge_node_repo
+    from rapidfuzz import process, fuzz
+    
+    nodes = knowledge_node_repo.get_all(limit=1000)
+    text_lower = text.lower().strip()
+    
+    all_phrases = []
+    for n in nodes:
+        if getattr(n, "status", "active") != "active":
+            continue
+            
+        title = getattr(n, "title", "")
+        resp = getattr(n, "response_markdown", "") or getattr(n, "description", "")
+        if title:
+            all_phrases.append((title.lower(), title, resp, n.id))
+            
+        for alias in getattr(n, "aliases", []):
+            if alias:
+                all_phrases.append((alias.lower(), title, resp, n.id))
+                
+    if not all_phrases:
+        return False, "No Node matched", 0.0, "", ""
+        
+    phrase_dict = {p[0]: (p[1], p[2], p[3]) for p in all_phrases}
+    phrase_keys = list(phrase_dict.keys())
+    
+    # 1. Check exact match or if the alias is fully contained in the user's text
+    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
+    for phrase_lower, match_str, resp, node_id in all_phrases:
+        if phrase_lower and (phrase_lower == text_lower or phrase_lower in text_lower):
+            return True, match_str, 1.0, resp, node_id
+            
+    # 2. Use RapidFuzz for fuzzy matching
+    result = process.extractOne(text_lower, phrase_keys, scorer=fuzz.ratio)
+    
+    if result:
+        match, score, index = result
+        if score >= 85: # 85% similarity threshold for exact matches with typos
+            original_phrase, resp, node_id = phrase_dict[match]
+            return True, original_phrase, score / 100.0, resp, node_id
+            
+    return False, "No Node matched", 0.0, "", ""
