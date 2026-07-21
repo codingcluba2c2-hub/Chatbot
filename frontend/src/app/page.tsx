@@ -12,12 +12,12 @@ import { RefreshDialog } from "@/components/chat/RefreshDialog";
 import { Toast } from "@/components/chat/Toast";
 import { DeveloperSidebar } from "@/components/dev/DeveloperSidebar";
 import { MemoryService } from "@/services/MemoryService";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 export default function Home() {
   const [sessionId, setSessionId] = useState("");
   const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState<MessageProps[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     setSessionId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
@@ -50,124 +50,86 @@ export default function Home() {
   }, []);
 
   // WebSocket Connection
-  useEffect(() => {
-    let reconnectTimer: NodeJS.Timeout;
-    
-    const connectWs = () => {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-      const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
-      
-      const ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        console.log("WebSocket connected");
-        setBackendStatus('online');
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'step_start') {
-            setMessages(prev => {
-              const last = prev[prev.length - 1];
-              if (last && last.role === 'bot') {
-                 const currentTrace = last.trace || { steps: [] };
-                 const newSteps = [...(currentTrace.steps || []), { step_name: data.step, status: 'running', start_time: data.start_time }];
-                 return [...prev.slice(0, -1), { ...last, trace: { ...currentTrace, steps: newSteps } }];
-              }
-              return prev;
-            });
-          } 
-          else if (data.type === 'step_end') {
-            setMessages(prev => {
-              const last = prev[prev.length - 1];
-              if (last && last.role === 'bot') {
-                 const currentTrace = last.trace || { steps: [] };
-                 const steps = [...(currentTrace.steps || [])];
-                 const stepIdx = steps.findIndex(s => s.step_name === data.step && s.status === 'running');
-                 if (stepIdx >= 0) {
-                    steps[stepIdx] = { 
-                      ...steps[stepIdx], 
-                      status: data.status, 
-                      duration: data.duration, 
-                      decision: data.decision,
-                      metadata: data.metadata || steps[stepIdx].metadata
-                    };
-                 }
-                 return [...prev.slice(0, -1), { ...last, trace: { ...currentTrace, steps } }];
-              }
-              return prev;
-            });
-          }
-          else if (data.type === 'stream') {
-            setMessages(prev => {
-              const last = prev[prev.length - 1];
-              if (last && last.role === 'bot') {
-                 return [...prev.slice(0, -1), { ...last, content: last.content + data.chunk }];
-              }
-              return prev;
-            });
-            // We do NOT set botState to typing here so the 3 dots don't show alongside the streaming text
-            if (botState === 'thinking') {
-               setBotState('typing'); // wait, if I set it to typing, it'll show the dots.
-               // Let's set it to 'streaming' if we had that state, but we don't.
-               // Actually, setting it to 'idle' might let the user type, which is okay.
-               // Let's just remove the state change here and handle it in ChatBody.
-            }
-          }
-          else if (data.type === 'error') {
-             console.error("WS Pipeline Error:", data.error);
-             setBotState('idle');
-          }
-          else if (data.type === 'done') {
-            setMessages(prev => {
-              const last = prev[prev.length - 1];
-              if (last && last.role === 'bot') {
-                 return [...prev.slice(0, -1), { 
-                   ...last, 
-                   intent: data.intent, 
-                   components: data.components, 
-                   actions: data.actions, 
-                   trace: { ...last.trace, totalBackendTimeMs: data.trace?.totalBackendTimeMs },
-                   content: data.response || last.content 
-                 }];
-              }
-              return prev;
-            });
-            setBotState('idle');
-            setResponseTimes(prev => [...prev, data.trace?.totalBackendTimeMs || 0]);
-            
-            if (data.actions) {
-              data.actions.forEach((a: any) => {
-                if (a.type === 'UPDATE_MEMORY') MemoryService.updateMemory(a.payload);
-              });
-            }
-          }
-        } catch(e) {
-          console.error("Failed to parse WS message", e);
+  const handleWsMessage = useCallback((data: any) => {
+    if (data.type === 'step_start') {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'bot') {
+            const currentTrace = last.trace || { steps: [] };
+            const newSteps = [...(currentTrace.steps || []), { step_name: data.step, status: 'running', start_time: data.start_time }];
+            return [...prev.slice(0, -1), { ...last, trace: { ...currentTrace, steps: newSteps } }];
         }
-      };
+        return prev;
+      });
+    } 
+    else if (data.type === 'step_end') {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'bot') {
+            const currentTrace = last.trace || { steps: [] };
+            const steps = [...(currentTrace.steps || [])];
+            const stepIdx = steps.findIndex(s => s.step_name === data.step && s.status === 'running');
+            if (stepIdx >= 0) {
+              steps[stepIdx] = { 
+                ...steps[stepIdx], 
+                status: data.status, 
+                duration: data.duration, 
+                decision: data.decision,
+                metadata: data.metadata || steps[stepIdx].metadata
+              };
+            }
+            return [...prev.slice(0, -1), { ...last, trace: { ...currentTrace, steps } }];
+        }
+        return prev;
+      });
+    }
+    else if (data.type === 'stream') {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'bot') {
+            return [...prev.slice(0, -1), { ...last, content: last.content + data.chunk }];
+        }
+        return prev;
+      });
+    }
+    else if (data.type === 'error') {
+        console.error("WS Pipeline Error:", data.error);
+        setBotState('idle');
+    }
+    else if (data.type === 'done') {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'bot') {
+            return [...prev.slice(0, -1), { 
+              ...last, 
+              intent: data.intent, 
+              components: data.components, 
+              actions: data.actions, 
+              trace: { ...last.trace, totalBackendTimeMs: data.trace?.totalBackendTimeMs },
+              content: data.response || last.content 
+            }];
+        }
+        return prev;
+      });
+      setBotState('idle');
+      setResponseTimes(prev => [...prev, data.trace?.totalBackendTimeMs || 0]);
       
-      ws.onclose = () => {
-        console.log("WebSocket disconnected. Reconnecting in 3 seconds...");
-        setBackendStatus('offline');
-        reconnectTimer = setTimeout(connectWs, 3000);
-      };
-      
-      wsRef.current = ws;
-    };
-    
-    connectWs();
-    
-    return () => {
-      clearTimeout(reconnectTimer);
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
+      if (data.actions) {
+        data.actions.forEach((a: any) => {
+          if (a.type === 'UPDATE_MEMORY') MemoryService.updateMemory(a.payload);
+        });
       }
-    };
+    }
   }, []);
+
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+  const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
+
+  const { sendMessage: sendWsMessage } = useWebSocket(
+    wsUrl,
+    handleWsMessage,
+    setBackendStatus
+  );
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -191,8 +153,7 @@ export default function Home() {
   }, [isChatOpen]);
 
   const ensureBackend = async () => {
-    // We rely on WS state mostly, but we can return true if ws is open
-    return wsRef.current?.readyState === WebSocket.OPEN;
+    return backendStatus === 'online';
   };
 
   const focusInput = useCallback(() => {
@@ -254,12 +215,12 @@ export default function Home() {
         throw new Error("WebSocket disconnected.");
       }
 
-      wsRef.current?.send(JSON.stringify({ 
+      sendWsMessage({ 
         message: textToSend,
         session_id: sessionId,
         conversation_id: conversationId,
         metadata: { ...metadata, memory: MemoryService.loadMemory() }
-      }));
+      });
 
       setTimeout(() => {
         setMessages((prev) => 

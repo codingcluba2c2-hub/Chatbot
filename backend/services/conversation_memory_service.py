@@ -28,6 +28,12 @@ class ConversationMemoryService:
                 "timestamp": msg["created_at"]
             })
             
+        # AI Safety: Sliding Window Context Truncation
+        # Keep only the last 10 messages to prevent context window overflow
+        max_messages = 10
+        if len(formatted_messages) > max_messages:
+            formatted_messages = formatted_messages[-max_messages:]
+            
         return {
             "conversation_id": session_id,
             "session_id": session_id,

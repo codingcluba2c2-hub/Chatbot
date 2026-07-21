@@ -47,56 +47,57 @@ class PgVectorProvider(VectorStoreProvider):
     def search(self, query: str, query_embedding: List[float], top_k: int = 5, filter_dict: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         db = SessionLocal()
         try:
-            # 1. Vector Search
-            stmt = select(DocumentChunkDB)
+            # Native Postgres Hybrid Search using pgvector distance and ts_rank_cd for full-text search
+            # We use a raw SQL query for optimal performance and access to FTS functions
+            
+            filter_clauses = ""
+            params = {
+                "query": query, 
+                "query_vec": str(query_embedding), 
+                "top_k": top_k
+            }
+            
             if filter_dict:
-                for k, v in filter_dict.items():
+                filters = []
+                for idx, (k, v) in enumerate(filter_dict.items()):
                     if k == "document_id":
-                        stmt = stmt.where(DocumentChunkDB.document_id == v)
+                        filters.append(f"document_id = :f_val_{idx}")
                     else:
-                        stmt = stmt.where(DocumentChunkDB.metadata_col[k].astext == str(v))
-                        
-            stmt_vector = stmt.order_by(DocumentChunkDB.embedding.cosine_distance(query_embedding)).limit(top_k * 2)
-            vector_results = db.execute(stmt_vector).scalars().all()
+                        filters.append(f"metadata_col->>'{k}' = :f_val_{idx}")
+                    params[f"f_val_{idx}"] = str(v)
+                
+                if filters:
+                    filter_clauses = "WHERE " + " AND ".join(filters)
+
+            sql = f"""
+                SELECT 
+                    id, 
+                    metadata_col,
+                    1.0 - (embedding <=> :query_vec::vector) AS cosine_sim,
+                    ts_rank_cd(to_tsvector('english', content), plainto_tsquery('english', :query)) AS keyword_score
+                FROM document_chunks
+                {filter_clauses}
+                ORDER BY (1.0 - (embedding <=> :query_vec::vector)) + ts_rank_cd(to_tsvector('english', content), plainto_tsquery('english', :query)) * 0.2 DESC
+                LIMIT :top_k
+            """
             
-            # 2. Keyword/Full-Text Search (Fallback using ilike for simplicity and robustness without schema changes)
-            # A more robust FTS requires TSVector column, but we can do a quick memory-based keyword match or basic SQL filtering on the top docs
-            # Since we want enterprise hybrid, we will fetch top K*2 by vector, then re-score them using BM25-like logic in Python.
-            
-            # Reconstruct response
-            import numpy as np
-            q_vec = np.array(query_embedding)
+            results = db.execute(text(sql), params).fetchall()
             
             scored_results = []
-            query_terms = [t.lower() for t in query.replace('-', ' ').split() if len(t) > 2]
-            
-            for chunk in vector_results:
-                c_vec = np.array(chunk.embedding)
-                cosine_sim = np.dot(q_vec, c_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(c_vec))
-                
-                # BM25-lite keyword scoring on the fetched chunks
-                text_content = chunk.content.lower()
-                keyword_score = 0.0
-                for term in query_terms:
-                    count = text_content.count(term)
-                    if count > 0:
-                        # Simple TF normalization
-                        tf = count / (count + 0.5 + 1.5 * (len(text_content.split()) / 50))
-                        keyword_score += tf * 0.2  # weight
-                
-                hybrid_score = float(cosine_sim) + keyword_score
-                
+            for row in results:
+                hybrid_score = float(row.cosine_sim) + (float(row.keyword_score) * 0.2)
                 scored_results.append({
-                    "id": chunk.id,
-                    "raw_score": float(cosine_sim),
-                    "keyword_score": keyword_score,
+                    "id": row.id,
+                    "raw_score": float(row.cosine_sim),
+                    "keyword_score": float(row.keyword_score),
                     "score": hybrid_score,
-                    "payload": chunk.metadata_col
+                    "payload": row.metadata_col
                 })
                 
-            # Sort by hybrid score
-            scored_results.sort(key=lambda x: x["score"], reverse=True)
-            return scored_results[:top_k]
+            return scored_results
+        except Exception as e:
+            logger.error(f"Error in hybrid search: {e}")
+            return []
         finally:
             db.close()
             

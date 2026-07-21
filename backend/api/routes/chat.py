@@ -17,8 +17,10 @@ from steps.spell_correction_step import SpellCorrectionStep
 from steps.knowledge_search_step import KnowledgeSearchStep
 from steps.knowledge_tree_step import KnowledgeTreeStep
 from steps.response_generator_step import ResponseGeneratorStep
+from steps.security_validation_step import SecurityValidationStep
 
 pipeline_runner = PipelineRunner()
+pipeline_runner.register_step("SecurityValidation", SecurityValidationStep())
 pipeline_runner.register_step("Normalize", NormalizeStep())
 pipeline_runner.register_step("FollowUpResolver", FollowUpResolverStep())
 pipeline_runner.register_step("GreetingFarewell", GreetingFarewellStep())
@@ -32,10 +34,14 @@ pipeline_runner.register_step("SpellCorrection", SpellCorrectionStep())
 pipeline_runner.register_step("KnowledgeSearch", KnowledgeSearchStep())
 pipeline_runner.register_step("ResponseGenerator", ResponseGeneratorStep())
 
+from fastapi import APIRouter, Request
+from core.rate_limit import limiter
+
 router = APIRouter()
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+@limiter.limit("10/minute")
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
     context = PipelineContext(
         original_message=request.message,
         session_id=request.session_id,

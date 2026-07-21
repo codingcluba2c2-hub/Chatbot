@@ -149,6 +149,8 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.3 }}
       className={cn("flex w-full mt-5 space-x-4 group", isBot ? "justify-start" : "justify-end")}
+      role="article"
+      aria-label={isBot ? "Bot message" : "Your message"}
     >
       {/* Bot Avatar */}
       {isBot && (

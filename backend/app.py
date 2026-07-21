@@ -5,6 +5,9 @@ os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from core.rate_limit import limiter
 import traceback
 from api.routes.chat import router as chat_router
 from api.routes.health import router as health_router
@@ -32,12 +35,30 @@ async def lifespan(app: FastAPI):
     print("----------------------------------------\n")
     yield
     print("Shutting down...")
+    try:
+        from core.database import engine
+        from api.routes.chat_ws import manager
+        
+        for client_id in list(manager.active_connections.keys()):
+            try:
+                manager.disconnect(client_id)
+            except Exception:
+                pass
+                
+        engine.dispose()
+        print("Database connections closed gracefully.")
+    except Exception as e:
+        print(f"Error during shutdown: {e}")
 
 app = FastAPI(title="Enterprise AI Pipeline API", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=cors_origins,  
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
@@ -62,11 +83,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={
             "success": False,
-            "step": "GlobalMiddleware",
-            "error": str(exc),
-            "traceback": traceback.format_exc(),
-            "developer_message": "An unhandled exception crashed the request.",
-            "user_message": "Internal server error."
+            "message": "Something went wrong."
         }
     )
 

@@ -239,7 +239,7 @@ class PipelineRunner:
                         context_updates["last_knowledge_node"] = result.metadata["knowledge_node"]
                     
                     if context_updates:
-                        ConversationMemoryService.update_context(context.session_id, context_updates)
+                        await asyncio.to_thread(ConversationMemoryService.update_context, context.session_id, context_updates)
                         
                 if hasattr(result, 'intent') and result.intent:
                     final_intent = result.intent
@@ -283,9 +283,9 @@ class PipelineRunner:
         if context.entities:
             context_updates["last_entities"] = list(context.entities.values())
             
-        ConversationMemoryService.update_context(context.session_id, context_updates)
+        await asyncio.to_thread(ConversationMemoryService.update_context, context.session_id, context_updates)
         
-        global_context = ConversationMemoryService.get_context(context.session_id)
+        global_context = await asyncio.to_thread(ConversationMemoryService.get_context, context.session_id)
             
         yield {
             "type": "done",
