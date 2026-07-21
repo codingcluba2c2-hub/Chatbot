@@ -44,13 +44,16 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
           
           if (mode === 'graph') {
             const isMatched = step.metadata && Object.keys(step.metadata).some(k => k.endsWith('_detected') && step.metadata[k] === true);
+            const isFollowupActive = step.step_name === 'FollowUpResolver' && step.metadata?.rewritten_query;
+            const isLlmUsed = step.step_name === 'ResponseGenerator' && step.metadata?.gemini_used === true;
+            
             let bgColor = 'bg-slate-800/80 border-slate-700'; // Default Gray (Skipped/Not Matched)
             
             if (isFailed) {
               bgColor = 'bg-red-900/20 border-red-700/50';
             } else if (step.decision === 'Stop') {
               bgColor = 'bg-orange-900/20 border-orange-700/50 shadow-[0_0_15px_rgba(249,115,22,0.15)]';
-            } else if (isMatched || step.step_name === 'KnowledgeSearch' && step.metadata.knowledge_search_decision === 'EXECUTED') {
+            } else if (isMatched || isFollowupActive || isLlmUsed || (step.step_name === 'KnowledgeSearch' && (step.metadata || {}).knowledge_search_decision === 'EXECUTED')) {
               bgColor = 'bg-emerald-900/20 border-emerald-700/50';
             } else if (step.duration > 0 && !isSkipped) {
               bgColor = 'bg-blue-900/20 border-blue-700/50'; // Executed but didn't match/stop
@@ -58,6 +61,17 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
             
             return (
               <React.Fragment key={index}>
+                {index === 0 && (
+                  <div className={`w-full max-w-sm rounded-lg border p-3 mb-4 text-center font-bold text-xs tracking-wider ${
+                    trace.steps.some((s: any) => s.step_name === 'ResponseGenerator' && s.metadata?.gemini_used)
+                      ? 'bg-purple-900/20 border-purple-700/50 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
+                      : 'bg-amber-900/20 border-amber-700/50 text-amber-400'
+                  }`}>
+                    {trace.steps.some((s: any) => s.step_name === 'ResponseGenerator' && s.metadata?.gemini_used)
+                      ? '⚡ ENTERPRISE LLM INvoked'
+                      : '🔒 LOCAL DETERMINISTIC MODE (NO LLM)'}
+                  </div>
+                )}
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -66,11 +80,24 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
                   onClick={() => toggleExpand(index)}
                 >
                   <div className="flex justify-between items-center">
-                    <span className={`font-semibold text-sm ${step.decision === 'Stop' ? 'text-orange-400' : (isMatched ? 'text-emerald-400' : 'text-slate-200')}`}>
+                    <span className={`font-semibold text-sm ${step.decision === 'Stop' ? 'text-orange-400' : (isMatched || isFollowupActive || isLlmUsed ? 'text-emerald-400' : 'text-slate-200')}`}>
                       {step.step_name}
                     </span>
                     <span className="text-xs font-mono text-slate-400">{step.duration}ms</span>
                   </div>
+                  
+                  {isFollowupActive && (
+                    <div className="mt-2 text-[10px] bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                      <span className="text-slate-400 block mb-1">Rewritten to:</span>
+                      <span className="text-blue-300 font-mono break-all block">"{step.metadata.rewritten_query}"</span>
+                    </div>
+                  )}
+                  
+                  {isLlmUsed && (
+                    <div className="mt-2 text-[10px] bg-slate-900/50 p-2 rounded border border-slate-700/50 text-purple-300 font-mono">
+                      Generating via Groq Llama 3.3
+                    </div>
+                  )}
                   
                   <AnimatePresence>
                     {isExpanded && (

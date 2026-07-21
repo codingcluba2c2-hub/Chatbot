@@ -38,6 +38,7 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
   const tabs = [
     { id: 'pipeline', label: 'Pipeline Graph', icon: GitBranch },
     { id: 'routing', label: 'Agent Routing', icon: Layers },
+    { id: 'context', label: 'Global Context', icon: Database },
     { id: 'logs', label: 'System Logs', icon: Terminal }
   ];
 
@@ -104,6 +105,42 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
             ) : (
               <div className="h-full">
                 {activeTab === 'pipeline' && <PipelineTimeline trace={trace} mode="graph" />}
+                {activeTab === 'context' && (
+                  <div className="font-mono text-xs p-3 rounded-md bg-slate-900 border border-slate-800 space-y-4">
+                    <div className="text-slate-400 uppercase tracking-widest text-[10px] mb-2 border-b border-slate-800 pb-2">Global Conversation Context Store</div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase block mb-1">Current Topic</span>
+                        <span className="text-blue-300 font-semibold">{trace.global_context?.current_topic || "None"}</span>
+                      </div>
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase block mb-1">Last Intent</span>
+                        <span className="text-emerald-400 font-semibold">{trace.global_context?.last_intent || "None"}</span>
+                      </div>
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800 col-span-2">
+                        <span className="text-slate-500 text-[10px] uppercase block mb-1">Last Entities</span>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {trace.global_context?.last_entities?.length > 0 ? (
+                            trace.global_context.last_entities.map((e: string, i: number) => (
+                              <span key={i} className="px-2 py-1 bg-slate-800 rounded text-amber-300">{e}</span>
+                            ))
+                          ) : (
+                            <span className="text-slate-600">No entities extracted yet</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800 col-span-2">
+                        <span className="text-slate-500 text-[10px] uppercase block mb-1">Last Memory Operation</span>
+                        <span className="text-purple-400 font-semibold">{trace.global_context?.last_memory_operation || "None"}</span>
+                      </div>
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800 col-span-2">
+                        <span className="text-slate-500 text-[10px] uppercase block mb-1">Last Knowledge Node</span>
+                        <span className="text-indigo-400 font-semibold">{trace.global_context?.last_knowledge_node || "None"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {activeTab === 'logs' && (
                   <div className="font-mono text-[11px] p-3 rounded-md bg-slate-900 border border-slate-800 space-y-1">
                     {trace.steps.map((s:any, idx:number) => (
@@ -132,6 +169,32 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                         <span className="text-slate-300">Normalize</span>
                         <span className="text-emerald-400 font-bold">✅</span>
                       </div>
+                      
+                      {trace.metadata?.rewritten_query && (
+                        <>
+                          <div className="text-center text-slate-600">↓</div>
+                          <div className="flex flex-col gap-2 bg-slate-800/50 p-3 rounded border border-slate-700/50">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-300 font-semibold text-xs">Follow-up Resolver:</span>
+                              <span className="text-purple-400 font-bold">REWRITTEN</span>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-slate-400 text-[11px]">Original:</span>
+                              <span className="text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded text-[11px] truncate max-w-[150px]">"{trace.metadata.original_query}"</span>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-slate-400 text-[11px]">Rewritten:</span>
+                              <span className="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px] truncate max-w-[150px]">"{trace.metadata.rewritten_query}"</span>
+                            </div>
+                            {trace.metadata.last_entity && (
+                              <div className="flex justify-between items-center mt-1">
+                                <span className="text-slate-400 text-[11px]">Entity Context:</span>
+                                <span className="text-amber-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px] truncate max-w-[150px]">{trace.metadata.last_entity}</span>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                       
                       {trace.metadata?.greeting_detected !== undefined && (
                         <>

@@ -6,6 +6,12 @@ import { format } from 'date-fns';
 import { Tooltip } from './Tooltip';
 import { ComponentRenderer } from '../sdui/ComponentRenderer';
 
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+import rehypeSanitize from 'rehype-sanitize';
+import rehypeHighlight from 'rehype-highlight';
+
 export type MessageProps = {
   id: string;
   role: 'user' | 'bot';
@@ -16,6 +22,7 @@ export type MessageProps = {
   trace?: any; 
   components?: any[];
   actions?: any[];
+  format?: 'markdown' | 'text';
   onReplay?: () => void;
   onAction?: (action: string, payload?: any) => void;
 };
@@ -31,7 +38,102 @@ const getIntentColor = (intent?: string) => {
   return "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
 };
 
-export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, timestamp, status, trace, components, actions, onReplay, onAction }) => {
+// Markdown Renderer with Memoization
+const MarkdownRenderer = React.memo(({ content }: { content: string }) => {
+  // Extract breadcrumb if it exists at the start of the message
+  let textToRender = content;
+  let breadcrumb = null;
+
+  const breadcrumbMatch = textToRender.match(/^📍 \*\*(.*?)\*\*\n\n/);
+  if (breadcrumbMatch) {
+    breadcrumb = breadcrumbMatch[1];
+    textToRender = textToRender.substring(breadcrumbMatch[0].length);
+  }
+
+  // Clean up excessive newlines
+  textToRender = textToRender.replace(/\n{3,}/g, '\n\n');
+
+  return (
+    <>
+      {breadcrumb && (
+        <div className="mb-3 text-[10.5px] font-semibold text-slate-500 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/80 px-3 py-2 rounded-lg border border-slate-200/60 dark:border-slate-700/60 shadow-sm leading-relaxed">
+          <span className="text-blue-500 dark:text-blue-400 mr-1.5 text-[12px] align-baseline">📍</span>
+          <span className="opacity-90">{breadcrumb.replace(/➔/g, '›')}</span>
+        </div>
+      )}
+      <div className="markdown-body">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeSanitize, rehypeHighlight]}
+          components={{
+            code({ node, inline, className, children, ...props }: any) {
+              const match = /language-(\w+)/.exec(className || '');
+              const language = match ? match[1] : '';
+              
+              if (!inline && match) {
+                return (
+                  <div className="relative my-3 rounded-xl overflow-hidden border border-slate-700/50 bg-[#0d1117] group">
+                    <div className="flex items-center justify-between px-4 py-2 text-xs font-sans text-slate-400 bg-[#161b22] border-b border-slate-700/50">
+                      <span>{language}</span>
+                      <button 
+                        onClick={() => navigator.clipboard.writeText(String(children).replace(/\n$/, ''))}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-white"
+                        title="Copy code"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                    <div className="p-4 overflow-x-auto text-sm">
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <code className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-pink-500 dark:text-pink-400 text-[0.9em]" {...props}>
+                  {children}
+                </code>
+              );
+            },
+            table({ children }) {
+              return (
+                <div className="overflow-x-auto my-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="min-w-full text-sm text-left">{children}</table>
+                </div>
+              );
+            },
+            th({ children }) {
+              return <th className="px-4 py-2 bg-slate-50 dark:bg-slate-800/50 font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">{children}</th>;
+            },
+            td({ children }) {
+              return <td className="px-4 py-2 border-b border-slate-200 dark:border-slate-700/50 text-slate-600 dark:text-slate-300">{children}</td>;
+            },
+            a({ children, href }) {
+              return (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline hover:text-blue-700 dark:hover:text-blue-300">
+                  {children}
+                </a>
+              );
+            },
+            h1: ({children}) => <h1 className="text-xl font-bold mt-4 mb-2">{children}</h1>,
+            h2: ({children}) => <h2 className="text-lg font-bold mt-4 mb-2">{children}</h2>,
+            h3: ({children}) => <h3 className="text-base font-bold mt-3 mb-1">{children}</h3>,
+            ul: ({children}) => <ul className="list-disc pl-5 my-2 space-y-0.5">{children}</ul>,
+            ol: ({children}) => <ol className="list-decimal pl-5 my-2 space-y-0.5">{children}</ol>,
+            li: ({children}) => <li className="text-slate-700 dark:text-slate-200">{children}</li>,
+            p: ({children}) => <p className="my-1.5">{children}</p>,
+          }}
+        >
+          {textToRender}
+        </ReactMarkdown>
+      </div>
+    </>
+  );
+});
+
+export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, timestamp, status, trace, components, actions, format: msgFormat, onReplay, onAction }) => {
   const isBot = role === 'bot';
   const [isCopied, setIsCopied] = useState(false);
   
@@ -65,7 +167,9 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
             ? "bg-white border border-gray-200/60 text-gray-800 rounded-2xl rounded-tl-sm dark:bg-[#1E293B] dark:border-slate-700/50 dark:text-gray-100 shadow-sm hover:shadow-md"
             : "bg-gradient-to-br from-[#0f172a] to-[#1e293b] dark:from-blue-600 dark:to-blue-800 border border-slate-700/50 dark:border-blue-500/30 text-white rounded-2xl rounded-tr-sm shadow-md"
         )}>
-          {(() => {
+          {msgFormat === 'markdown' ? (
+            <MarkdownRenderer content={content} />
+          ) : (() => {
             let textToRender = content;
             let breadcrumb = null;
 

@@ -17,11 +17,13 @@ export default function Home() {
   const [sessionId, setSessionId] = useState("");
   const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState<MessageProps[]>([]);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     setSessionId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
     setConversationId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
   }, []);
+  
   const [input, setInput] = useState("");
   const [botState, setBotState] = useState<'idle' | 'thinking' | 'typing'>('idle');
   const [backendStatus, setBackendStatus] = useState<'online' | 'offline'>('online');
@@ -47,6 +49,126 @@ export default function Home() {
     setToastMessage(msg);
   }, []);
 
+  // WebSocket Connection
+  useEffect(() => {
+    let reconnectTimer: NodeJS.Timeout;
+    
+    const connectWs = () => {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
+      
+      const ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log("WebSocket connected");
+        setBackendStatus('online');
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'step_start') {
+            setMessages(prev => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === 'bot') {
+                 const currentTrace = last.trace || { steps: [] };
+                 const newSteps = [...(currentTrace.steps || []), { step_name: data.step, status: 'running', start_time: data.start_time }];
+                 return [...prev.slice(0, -1), { ...last, trace: { ...currentTrace, steps: newSteps } }];
+              }
+              return prev;
+            });
+          } 
+          else if (data.type === 'step_end') {
+            setMessages(prev => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === 'bot') {
+                 const currentTrace = last.trace || { steps: [] };
+                 const steps = [...(currentTrace.steps || [])];
+                 const stepIdx = steps.findIndex(s => s.step_name === data.step && s.status === 'running');
+                 if (stepIdx >= 0) {
+                    steps[stepIdx] = { 
+                      ...steps[stepIdx], 
+                      status: data.status, 
+                      duration: data.duration, 
+                      decision: data.decision,
+                      metadata: data.metadata || steps[stepIdx].metadata
+                    };
+                 }
+                 return [...prev.slice(0, -1), { ...last, trace: { ...currentTrace, steps } }];
+              }
+              return prev;
+            });
+          }
+          else if (data.type === 'stream') {
+            setMessages(prev => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === 'bot') {
+                 return [...prev.slice(0, -1), { ...last, content: last.content + data.chunk }];
+              }
+              return prev;
+            });
+            // We do NOT set botState to typing here so the 3 dots don't show alongside the streaming text
+            if (botState === 'thinking') {
+               setBotState('typing'); // wait, if I set it to typing, it'll show the dots.
+               // Let's set it to 'streaming' if we had that state, but we don't.
+               // Actually, setting it to 'idle' might let the user type, which is okay.
+               // Let's just remove the state change here and handle it in ChatBody.
+            }
+          }
+          else if (data.type === 'error') {
+             console.error("WS Pipeline Error:", data.error);
+             setBotState('idle');
+          }
+          else if (data.type === 'done') {
+            setMessages(prev => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === 'bot') {
+                 return [...prev.slice(0, -1), { 
+                   ...last, 
+                   intent: data.intent, 
+                   components: data.components, 
+                   actions: data.actions, 
+                   trace: { ...last.trace, totalBackendTimeMs: data.trace?.totalBackendTimeMs },
+                   content: data.response || last.content 
+                 }];
+              }
+              return prev;
+            });
+            setBotState('idle');
+            setResponseTimes(prev => [...prev, data.trace?.totalBackendTimeMs || 0]);
+            
+            if (data.actions) {
+              data.actions.forEach((a: any) => {
+                if (a.type === 'UPDATE_MEMORY') MemoryService.updateMemory(a.payload);
+              });
+            }
+          }
+        } catch(e) {
+          console.error("Failed to parse WS message", e);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log("WebSocket disconnected. Reconnecting in 3 seconds...");
+        setBackendStatus('offline');
+        reconnectTimer = setTimeout(connectWs, 3000);
+      };
+      
+      wsRef.current = ws;
+    };
+    
+    connectWs();
+    
+    return () => {
+      clearTimeout(reconnectTimer);
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -69,24 +191,8 @@ export default function Home() {
   }, [isChatOpen]);
 
   const ensureBackend = async () => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-    try {
-      await fetch(`${backendUrl}/`, { method: "GET" }).catch(() => {});
-      if (backendStatus === 'offline') setBackendStatus('online');
-      return true;
-    } catch (err) {
-      setBackendStatus('offline');
-      showToast("Backend Starting... Retrying in 5 seconds.");
-      return new Promise((resolve) => setTimeout(async () => {
-        try {
-          await fetch(`${backendUrl}/`, { method: "GET" }).catch(() => {});
-          if (backendStatus === 'offline') setBackendStatus('online');
-          resolve(true);
-        } catch(e) {
-          resolve(false);
-        }
-      }, 5000));
-    }
+    // We rely on WS state mostly, but we can return true if ws is open
+    return wsRef.current?.readyState === WebSocket.OPEN;
   };
 
   const focusInput = useCallback(() => {
@@ -110,7 +216,7 @@ export default function Home() {
     focusInput();
   }, [focusInput, showToast, sessionId]);
 
-  const sendMessage = useCallback(async (textToSend: string) => {
+  const sendMessage = useCallback(async (textToSend: string, metadata: any = {}) => {
     if (!textToSend) return;
     if (botState !== 'idle') return;
 
@@ -121,13 +227,20 @@ export default function Home() {
       timestamp: Date.now(),
       status: "sent"
     };
+    
+    const botMsgId = Date.now().toString() + "-bot";
+    const botMessage: MessageProps = {
+      id: botMsgId,
+      role: "bot",
+      content: "",
+      timestamp: Date.now(),
+      format: "markdown"
+    };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage, botMessage]);
     setInput("");
     setBotState('thinking');
     focusInput();
-
-    const startTime = Date.now();
 
     try {
       setTimeout(() => {
@@ -136,61 +249,23 @@ export default function Home() {
         );
       }, 0);
 
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-      const backendReady = await ensureBackend();
-      if (!backendReady) throw new Error("Backend not available after waiting");
-
-      const response = await fetch(`${backendUrl}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: textToSend,
-          session_id: sessionId,
-          conversation_id: conversationId,
-          metadata: { memory: MemoryService.loadMemory() }
-        }),
-      });
-      
-      const endTime = Date.now();
-      setResponseTimes(prev => [...prev, endTime - startTime]);
-
-      setBotState('typing');
-
-      setMessages((prev) => 
-        prev.map(m => m.id === userMessage.id ? { ...m, status: "read" } : m)
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'no text');
-        throw new Error(`Server returned ${response.status} ${response.statusText}: ${errorText}`);
+      const isConnected = await ensureBackend();
+      if (!isConnected) {
+        throw new Error("WebSocket disconnected.");
       }
 
-      const data = await response.json();
-      
-      if (data.actions) {
-        data.actions.forEach((action: any) => {
-          if (action.type === 'UPDATE_MEMORY') {
-            MemoryService.updateMemory(action.payload);
-          }
-        });
-      }
-      
+      wsRef.current?.send(JSON.stringify({ 
+        message: textToSend,
+        session_id: sessionId,
+        conversation_id: conversationId,
+        metadata: { ...metadata, memory: MemoryService.loadMemory() }
+      }));
+
       setTimeout(() => {
-        const botMessage: MessageProps = {
-          id: Date.now().toString(),
-          role: "bot",
-          content: data.response || "",
-          intent: data.intent,
-          timestamp: Date.now(),
-          components: data.components,
-          actions: data.actions,
-          trace: data.trace
-        };
-        
-        setMessages((prev) => [...prev, botMessage]);
-        setBotState('idle');
-        focusInput();
-      }, 0);
+        setMessages((prev) => 
+          prev.map(m => m.id === userMessage.id ? { ...m, status: "read" } : m)
+        );
+      }, 200);
 
     } catch (error) {
       console.error(error);
@@ -198,11 +273,11 @@ export default function Home() {
         const errorMessage: MessageProps = {
           id: Date.now().toString(),
           role: "bot",
-          content: "Oops! Something went wrong connecting to the backend. Please check if your Python server is running.",
+          content: "Oops! Something went wrong connecting to the backend via WebSocket. Please check if your server is running.",
           intent: "fallback",
           timestamp: Date.now()
         };
-        setMessages((prev) => [...prev, errorMessage]);
+        setMessages((prev) => [...prev.filter(m => m.id !== botMsgId), errorMessage]);
         setBotState('idle');
         setBackendStatus('offline');
         showToast("Unable to reach backend.");
@@ -219,68 +294,8 @@ export default function Home() {
     }
 
     const textToSend = payload.action || 'Action Executed';
-    
-    const userMessage: MessageProps = {
-      id: Date.now().toString(),
-      role: "user",
-      content: textToSend,
-      timestamp: Date.now(),
-      status: "sent"
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setBotState('thinking');
-    
-    try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-      const backendReady = await ensureBackend();
-      if (!backendReady) throw new Error("Backend not available after waiting");
-
-      const response = await fetch(`${backendUrl}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: textToSend,
-          session_id: sessionId,
-          conversation_id: conversationId,
-          metadata: { action: payload.action, data: payload.data, memory: MemoryService.loadMemory() }
-        }),
-      });
-      
-      setBotState('typing');
-
-      if (!response.ok) throw new Error("Failed to connect to the server");
-      const data = await response.json();
-      
-      if (data.actions) {
-        data.actions.forEach((action: any) => {
-          if (action.type === 'UPDATE_MEMORY') {
-            MemoryService.updateMemory(action.payload);
-          }
-        });
-      }
-      
-      const botMessage: MessageProps = {
-        id: Date.now().toString(),
-        role: "bot",
-        content: data.response || "",
-        intent: data.intent,
-        timestamp: Date.now(),
-        components: data.components,
-        actions: data.actions,
-        trace: data.trace
-      };
-      
-      setMessages((prev) => [...prev, botMessage]);
-      setBotState('idle');
-      focusInput();
-
-    } catch (error) {
-      console.error(error);
-      setBotState('idle');
-      showToast("Unable to reach backend for action.");
-    }
-  }, [botState, sendMessage, sessionId, conversationId, focusInput, showToast]);
+    return sendMessage(textToSend, { action: payload.action, data: payload.data });
+  }, [botState, sendMessage]);
 
   const handleSuggestionClick = useCallback((suggestion: string) => {
     sendMessage(suggestion);

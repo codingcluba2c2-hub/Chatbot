@@ -43,6 +43,9 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
+from api.routes.chat_ws import router as chat_ws_router
+
+app.include_router(chat_ws_router)
 app.include_router(chat_router)
 app.include_router(health_router)
 app.include_router(session_router)

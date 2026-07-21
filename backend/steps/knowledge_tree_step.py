@@ -11,6 +11,8 @@ class KnowledgeTreeStep(PipelineStep):
         is_matched, matched_node, conf, response_md, node_id = detect_knowledge_tree(context.normalized_message)
         
         if is_matched:
+            context.entities["knowledge_node"] = matched_node
+            
             final_response = ResponseService.get_sequential_response(
                 context.session_id,
                 f"knowledge_tree_{matched_node}",
@@ -55,7 +57,13 @@ class KnowledgeTreeStep(PipelineStep):
                 intent=INTENT_KNOWLEDGE_TREE,
                 response=final_response,
                 components=components,
-                metadata={"matched_node": matched_node, "confidence": conf, "node_id": node_id}
+                metadata={
+                    "matched_node": matched_node, 
+                    "confidence": conf, 
+                    "node_id": node_id,
+                    "topic": matched_node,
+                    "knowledge_node": matched_node
+                }
             )
             
         return PipelineResult(continue_pipeline=True)

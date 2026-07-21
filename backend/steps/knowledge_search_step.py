@@ -47,4 +47,8 @@ class KnowledgeSearchStep(PipelineStep):
         context.metadata["retrieval_latency_ms"] = int((t1 - t0) * 1000)
         context.current_intent = "Knowledge"
         
+        # If the query is short (like a job title), register it as the active entity for follow-ups
+        if len(search_query.split()) <= 4:
+            context.entities["knowledge_search_topic"] = search_query
+        
         return PipelineResult(continue_pipeline=True)

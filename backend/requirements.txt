@@ -39,3 +39,7 @@ pgvector
 google-genai
 sentence-transformers  
 qdrant-client
+
+# Agent Orchestration & Real-time Communication
+agno
+websockets

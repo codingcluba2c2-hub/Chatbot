@@ -22,8 +22,8 @@ class MemoryDetectorStep(PipelineStep):
         
         # Patterns for LOOKUP
         self.lookup_patterns = [
-            (r"(?i)^(?:what's my name|what is my name|who am i|do you know my name|what do you call me|my name)$", "user_name"),
-            (r"(?i)^(?:what's your name|what is your name|who are you|what do i call you|your name)$", "assistant_name")
+            (r"(?i)^(?:what's my name|what is my name|who am i|do you know my name|what do you call me|what should you call me|my name)[?.\s]*$", "user_name"),
+            (r"(?i)^(?:what's your name|what is your name|who are you|what do i call you|your name)[?.\s]*$", "assistant_name")
         ]
 
     def _extract_name(self, text: str) -> str:

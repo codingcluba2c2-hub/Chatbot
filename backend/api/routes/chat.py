@@ -6,6 +6,7 @@ from pipeline.pipeline_runner import PipelineRunner
 from pipeline.pipeline_context import PipelineContext
 
 from steps.normalize_step import NormalizeStep
+from steps.followup_resolver_step import FollowUpResolverStep
 from steps.greeting_step import GreetingFarewellStep
 from steps.fastpath_router_step import FastPathRouterStep
 from steps.faq_step import FAQStep
@@ -19,6 +20,7 @@ from steps.response_generator_step import ResponseGeneratorStep
 
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
+pipeline_runner.register_step("FollowUpResolver", FollowUpResolverStep())
 pipeline_runner.register_step("GreetingFarewell", GreetingFarewellStep())
 pipeline_runner.register_step("KnowledgeTree", KnowledgeTreeStep())
 pipeline_runner.register_step("FastPath", FastPathRouterStep())

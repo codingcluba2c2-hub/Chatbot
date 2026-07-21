@@ -79,3 +79,25 @@ class ConversationMemoryService:
             entities[entity_type].append(value)
             
         fact_repo.set_fact(session_id, "entities", entities)
+
+    @classmethod
+    def get_context(cls, session_id: str) -> Dict[str, Any]:
+        cls._initialize_memory(session_id)
+        context = fact_repo.get_by_session(session_id).get("conversation_context", {})
+        return {
+            "conversation_id": context.get("conversation_id", session_id),
+            "current_topic": context.get("current_topic", ""),
+            "last_intent": context.get("last_intent", ""),
+            "last_entities": context.get("last_entities", []),
+            "last_memory_operation": context.get("last_memory_operation", ""),
+            "last_knowledge_node": context.get("last_knowledge_node", ""),
+            "last_rag_document": context.get("last_rag_document", ""),
+            "last_selected_button": context.get("last_selected_button", "")
+        }
+
+    @classmethod
+    def update_context(cls, session_id: str, new_data: Dict[str, Any]):
+        cls._initialize_memory(session_id)
+        current_context = cls.get_context(session_id)
+        current_context.update(new_data)
+        fact_repo.set_fact(session_id, "conversation_context", current_context)

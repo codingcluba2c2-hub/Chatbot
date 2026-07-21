@@ -79,9 +79,10 @@ class ResponseGeneratorStep(PipelineStep):
         if provider:
             system_prompt = (
                 "You are Mobiloitte's Enterprise AI Assistant. "
-                "CRITICAL INSTRUCTION: Answer the user's question using ONLY the provided filtered sentences below. "
+                "CRITICAL INSTRUCTION: Answer the user's query using ONLY the provided filtered sentences below. "
                 "Do NOT use any outside knowledge, assumptions, or external internet data under any circumstances. "
                 "If the exact answer is not explicitly written in the provided sentences, you MUST say 'I couldn't find enough relevant information in the knowledge base to answer that.' "
+                "If the user's query is just a keyword or job title (like 'Product Designer'), summarize the available details (e.g., Role, Salary, Experience) about it from the context. "
                 "FORMATTING RULES:\n"
                 "- If Location/Address, format as: 📍 Address\\n[address]\n"
                 "- If Phone, format as: 📞 Phone\\n[phone]\n"

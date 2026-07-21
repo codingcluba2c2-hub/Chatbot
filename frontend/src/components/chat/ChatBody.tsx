@@ -104,6 +104,8 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
                 }
               }
 
+              const isEmpty = !msg.content && (!msg.components || msg.components.length === 0) && msg.role === 'bot';
+              
               return (
                 <React.Fragment key={msg.id}>
                   {showDateDivider && (
@@ -113,22 +115,24 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
                        </span>
                      </div>
                   )}
-                  <ChatMessage 
-                    {...msg} 
-                    onReplay={onReplayMessage && msg.trace ? () => onReplayMessage(msg.id) : undefined} 
-                    onAction={onAction}
-                  />
+                  {!isEmpty && (
+                    <ChatMessage 
+                      {...msg} 
+                      onReplay={onReplayMessage && msg.trace ? () => onReplayMessage(msg.id) : undefined} 
+                      onAction={onAction}
+                    />
+                  )}
                 </React.Fragment>
               );
             })}
             
-            {botState === 'thinking' && (
+            {botState === 'thinking' && (!messages.length || messages[messages.length-1].role !== 'bot' || !messages[messages.length-1].content) && (
               <motion.div key="thinking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <ThinkingIndicator />
               </motion.div>
             )}
             
-            {botState === 'typing' && (
+            {botState === 'typing' && (!messages.length || messages[messages.length-1].role !== 'bot' || !messages[messages.length-1].content) && (
               <motion.div key="typing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <TypingIndicator />
               </motion.div>
