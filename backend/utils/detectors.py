@@ -1,7 +1,7 @@
 # backend/utils/detectors.py
 import re
 from typing import Optional, Tuple
-from repositories.registry import greeting_repo, farewell_repo, fastpath_repo, faq_repo
+from core.database import greeting_repo, farewell_repo, fastpath_repo, faq_repo
 
 def validate_query(text: str) -> dict:
     """
@@ -250,7 +250,7 @@ def detect_knowledge_tree(text: str) -> Tuple[bool, str, float, str, str]:
     Detects if the message matches a Knowledge Tree node.
     Returns: (is_matched, matched_node_title, confidence, response_markdown, node_id)
     """
-    from repositories.registry import knowledge_node_repo
+    from core.database import knowledge_node_repo
     from rapidfuzz import process, fuzz
     
     nodes = knowledge_node_repo.get_all(limit=1000)

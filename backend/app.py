@@ -1,3 +1,4 @@
+from core.config import POSTGRES_URL
 import os
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -7,14 +8,11 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from core.rate_limit import limiter
+from chatbot.utils import limiter
 import traceback
-from api.routes.chat import router as chat_router
-from api.routes.health import router as health_router
-from api.routes.session import router as session_router
-from api.routes.admin import router as admin_router
-from api.routes.knowledge import router as knowledge_router
-from api.routes.dashboard import router as dashboard_router
+from api.routes import router as api_router
+from api.admin import router as admin_router
+from services.knowledge import router as knowledge_router
 from core.logger import get_logger
 
 logger = get_logger("app")
@@ -37,7 +35,7 @@ async def lifespan(app: FastAPI):
     print("Shutting down...")
     try:
         from core.database import engine
-        from api.routes.chat_ws import manager
+        from api.routes import manager
         
         for client_id in list(manager.active_connections.keys()):
             try:
@@ -64,16 +62,9 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
-from api.routes.chat_ws import router as chat_ws_router
-
-app.include_router(chat_ws_router)
-app.include_router(chat_router)
-app.include_router(health_router)
-app.include_router(session_router)
+app.include_router(api_router)
 app.include_router(admin_router)
 app.include_router(knowledge_router)
-app.include_router(dashboard_router)
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled Exception on {request.method} {request.url.path}")

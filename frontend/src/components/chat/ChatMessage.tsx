@@ -44,7 +44,7 @@ const MarkdownRenderer = React.memo(({ content }: { content: string }) => {
   let textToRender = content;
   let breadcrumb = null;
 
-  const breadcrumbMatch = textToRender.match(/^📍 \*\*(.*?)\*\*\n\n/);
+  const breadcrumbMatch = textToRender.match(/^📍 \*\*(.*?)\*\*(?:\r?\n){2,}/);
   if (breadcrumbMatch) {
     breadcrumb = breadcrumbMatch[1];
     textToRender = textToRender.substring(breadcrumbMatch[0].length);

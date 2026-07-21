@@ -16,17 +16,12 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 
 # Order of pipeline steps to execute
 PIPELINE_STEPS: List[str] = [
-    "SecurityValidation",
     "Normalize",
-    "FollowUpResolver",
     "GreetingFarewell",
-    "Memory",
     "KnowledgeTree",
+    "Gibberish",
     "FastPath",
     "FAQ",
-    "MeaningfulValidator",
-    "Gibberish",
-    "SpellCorrection",
     "KnowledgeSearch",
     "ResponseGenerator"
 ]
