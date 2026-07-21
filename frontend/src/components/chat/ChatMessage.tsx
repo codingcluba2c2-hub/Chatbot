@@ -65,28 +65,55 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
             ? "bg-white border border-gray-200/60 text-gray-800 rounded-2xl rounded-tl-sm dark:bg-[#1E293B] dark:border-slate-700/50 dark:text-gray-100 shadow-sm hover:shadow-md"
             : "bg-gradient-to-br from-[#0f172a] to-[#1e293b] dark:from-blue-600 dark:to-blue-800 border border-slate-700/50 dark:border-blue-500/30 text-white rounded-2xl rounded-tr-sm shadow-md"
         )}>
-          {content.split(/(\*\*.*?\*\*|\[.*?\]\(.*?\))/g).map((part, i) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-              return <strong key={i} className="font-semibold text-blue-700 dark:text-blue-400">{part.slice(2, -2)}</strong>;
+          {(() => {
+            let textToRender = content;
+            let breadcrumb = null;
+
+            // Extract breadcrumb if it exists at the start of the message
+            const breadcrumbMatch = textToRender.match(/^📍 \*\*(.*?)\*\*\n\n/);
+            if (breadcrumbMatch) {
+              breadcrumb = breadcrumbMatch[1];
+              textToRender = textToRender.substring(breadcrumbMatch[0].length);
             }
-            if (part.startsWith('[') && part.endsWith(')') && part.includes('](')) {
-              const match = part.match(/\[(.*?)\]\((.*?)\)/);
-              if (match) {
-                return (
-                  <a 
-                    key={i} 
-                    href={match[2]} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-block mt-3 mb-1 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow transition-all no-underline w-auto border border-blue-500"
-                  >
-                    {match[1]}
-                  </a>
-                );
+
+            // Move pointing hand icon inside the link so it renders inside the button
+            textToRender = textToRender.replace(/👉\s*\[/g, '[👉 ');
+
+            const parts = textToRender.split(/(\*\*.*?\*\*|\[.*?\]\(.*?\))/g).map((part, i) => {
+              if (part.startsWith('**') && part.endsWith('**')) {
+                return <strong key={i} className="font-semibold text-blue-700 dark:text-blue-400">{part.slice(2, -2)}</strong>;
               }
-            }
-            return part;
-          })}
+              if (part.startsWith('[') && part.endsWith(')') && part.includes('](')) {
+                const match = part.match(/\[(.*?)\]\((.*?)\)/);
+                if (match) {
+                  return (
+                    <a 
+                      key={i} 
+                      href={match[2]} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-block mt-3 mb-1 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow transition-all no-underline w-auto border border-blue-500"
+                    >
+                      {match[1]}
+                    </a>
+                  );
+                }
+              }
+              return <React.Fragment key={i}>{part}</React.Fragment>;
+            });
+
+            return (
+              <>
+                {breadcrumb && (
+                  <div className="mb-3 text-[10.5px] font-semibold text-slate-500 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/80 px-3 py-2 rounded-lg border border-slate-200/60 dark:border-slate-700/60 shadow-sm leading-relaxed">
+                    <span className="text-blue-500 dark:text-blue-400 mr-1.5 text-[12px] align-baseline">📍</span>
+                    <span className="opacity-90">{breadcrumb.replace(/➔/g, '›')}</span>
+                  </div>
+                )}
+                {parts}
+              </>
+            );
+          })()}
           
           {/* SDUI Components rendering inside the bubble if bot */}
           {isBot && components && components.length > 0 && onAction && (
