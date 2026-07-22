@@ -122,7 +122,7 @@ export default function Home() {
     }
   }, []);
 
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
   const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
 
   const { sendMessage: sendWsMessage } = useWebSocket(

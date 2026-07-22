@@ -10,7 +10,7 @@ export default function KnowledgeTreePage() {
   const [formData, setFormData] = useState<any>({});
   
   const queryClient = useQueryClient();
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
   const apiUrl = `${backendUrl}/api/admin/knowledge_nodes`;
   const buttonsApiUrl = `${backendUrl}/api/admin/knowledge_buttons`;
 

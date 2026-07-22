@@ -44,7 +44,7 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
           
           if (mode === 'graph') {
             const isMatched = step.metadata && Object.keys(step.metadata).some(k => k.endsWith('_detected') && step.metadata[k] === true);
-            const isFollowupActive = step.step_name === 'FollowUpResolver' && step.metadata?.rewritten_query;
+            const isFollowupActive = (step.step_name === 'FollowUpResolver' || step.step_name === 'ConversationContextResolver') && step.metadata?.rewritten_query;
             const isLlmUsed = step.step_name === 'ResponseGenerator' && step.metadata?.gemini_used === true;
             
             let bgColor = 'bg-slate-800/80 border-slate-700'; // Default Gray (Skipped/Not Matched)
@@ -63,11 +63,11 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
               <React.Fragment key={index}>
                 {index === 0 && (
                   <div className={`w-full max-w-sm rounded-lg border p-3 mb-4 text-center font-bold text-xs tracking-wider ${
-                    trace.steps.some((s: any) => s.step_name === 'ResponseGenerator' && s.metadata?.gemini_used)
+                    trace.steps.some((s: any) => s.step_name === 'ResponseGenerator' && s.metadata?.llm_used)
                       ? 'bg-purple-900/20 border-purple-700/50 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
                       : 'bg-amber-900/20 border-amber-700/50 text-amber-400'
                   }`}>
-                    {trace.steps.some((s: any) => s.step_name === 'ResponseGenerator' && s.metadata?.gemini_used)
+                    {trace.steps.some((s: any) => s.step_name === 'ResponseGenerator' && s.metadata?.llm_used)
                       ? '⚡ ENTERPRISE LLM INvoked'
                       : '🔒 LOCAL DETERMINISTIC MODE (NO LLM)'}
                   </div>

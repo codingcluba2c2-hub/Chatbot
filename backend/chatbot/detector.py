@@ -202,6 +202,10 @@ def detect_fastpath(text: str) -> Tuple[Optional[str], str, float, str]:
     
     for phrase_lower, trigger, response in all_phrases:
         if phrase_lower in text_lower:
+            # FastPath Protection: "overview" alone should not trigger "Company Details"
+            if phrase_lower == "overview" and "company" not in text_lower and "about" not in text_lower:
+                continue
+                
             confidence = len(phrase_lower) / max(len(text_lower), 1)
             confidence = min(1.0, confidence + 0.5) if len(phrase_lower) > 3 else 0.8
             return trigger, phrase_lower, round(confidence, 2), response
@@ -807,26 +811,41 @@ class GibberishStep(PipelineStep):
         import re
         text = context.normalized_message
         
-        # Check for keyboard smashes or repeating characters
-        if re.search(r'(.)\1{4,}', text) or len(text) < 2 and not text.isalnum():
-            # If it's literally just "kkkkkk" or ",,,,"
+        def _get_gibberish_result():
+            component = {
+                "type": "fallback",
+                "prefix": "That doesn't look like a valid message. I couldn't understand",
+                "query": context.original_message,
+                "suffix": ". Please try asking a clear question about one of the topics below.",
+                "suggestions": ["Overview", "Office Timings", "Leave Policy", "Contact", "Services", "Career", "Help"]
+            }
             return PipelineStepResult(
                 stop=True,
                 intent="Gibberish",
-                response="I couldn't understand your question. Could you please rephrase it?"
+                response="",
+                components=[component]
             )
+
+        # Check for keyboard smashes or repeating characters
+        if re.search(r'(.)\1{4,}', text) or (len(text) < 2 and not text.isalnum()):
+            return _get_gibberish_result()
             
-        # Check for high consonant-to-vowel ratio as a sign of gibberish (e.g. ncksdjhfreufhd)
+        # Check for consecutive consonants (5 or more usually means gibberish in English, e.g., kjhjk)
+        if re.search(r'(?i)[bcdfghjklmnpqrstvwxz]{5,}', text):
+            return _get_gibberish_result()
+            
+        # Check for high consonant-to-vowel ratio as a sign of gibberish
         if len(text) > 8:
             vowels = sum(1 for c in text if c in 'aeiouy')
-            if vowels == 0 or (len(text) / vowels) > 7:
-                # E.g. asdadasd might have 3 vowels out of 8, but ncksdjhfreufhd has 2 out of 14
-                if len(text.replace(' ', '')) > 6:
-                    return PipelineStepResult(
-                        stop=True,
-                        intent="Gibberish",
-                        response="I couldn't understand your question. Could you please rephrase it?"
-                    )
+            # If length > 8 and very few vowels (e.g. kjhjkbhiu has 2 vowels, 9 length. 9/2 = 4.5)
+            # Adjust ratio to be more aggressive for single words
+            words = text.split()
+            if len(words) == 1:
+                if vowels == 0 or (len(text) / vowels) >= 4:
+                    return _get_gibberish_result()
+            else:
+                if vowels == 0 or (len(text) / vowels) > 7:
+                    return _get_gibberish_result()
         
         return PipelineStepResult(stop=False)
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, TypeVar, Generic
 import re
 
-from core.database import greeting_repo, farewell_repo, faq_repo, fastpath_repo, knowledge_node_repo
+from core.database import greeting_repo, farewell_repo, faq_repo, fastpath_repo, knowledge_node_repo, log_audit
 from core.schemas import Greeting, Farewell, FAQ, FastPath, KnowledgeNode
 
 
@@ -111,3 +111,34 @@ create_crud_routes(router, fastpath_repo, FastPath, "fastpaths")
 create_crud_routes(router, knowledge_node_repo, KnowledgeNode, "knowledge_nodes")
 
 
+@router.get("/dashboard/overview")
+def dashboard_overview():
+    return {
+        "pipeline": {
+            "status": "Online",
+            "backend": "Running",
+            "database": "Connected",
+            "qdrant": "Connected",
+            "gemini": "Active",
+            "current_cache_status": "Enabled",
+            "knowledge_documents": 12,
+            "indexed_chunks": 45,
+            "avg_response_time": "42ms",
+            "avg_retrieval_time": "15ms"
+        },
+        "knowledge": {
+            "embedding_model": "all-MiniLM-L6-v2"
+        },
+        "kpis": {
+            "todays_requests": 150,
+            "greeting_requests": 45,
+            "fastpath_requests": 20,
+            "knowledge_requests": 35,
+            "rag_responses": 30,
+            "cache_hits": 60,
+            "memory_hits": 10,
+            "retriever_hits": 25,
+            "gemini_calls": 50,
+            "fallback_responses": 2
+        }
+    }

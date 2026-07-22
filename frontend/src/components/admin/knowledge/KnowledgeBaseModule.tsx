@@ -102,7 +102,7 @@ export const KnowledgeBaseModule = () => {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
       const res = await fetch(`${backendUrl}/api/knowledge/documents`);
       if(res.ok) {
         const data = await res.json();
@@ -124,7 +124,7 @@ export const KnowledgeBaseModule = () => {
     
     const interval = setInterval(async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+        const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
         const res = await fetch(`${backendUrl}/api/knowledge/documents`);
         if(res.ok) {
           const data = await res.json();
@@ -159,7 +159,7 @@ export const KnowledgeBaseModule = () => {
     
     try {
       setUploadProgress(40);
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
       const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
         method: "POST",
         body: formData,
@@ -184,7 +184,7 @@ export const KnowledgeBaseModule = () => {
   const handleDelete = async (id: string) => {
     if(!confirm("Are you sure you want to delete this document and all its chunks?")) return;
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
       await fetch(`${backendUrl}/api/knowledge/documents/${id}`, { method: "DELETE" });
       fetchDocuments();
     } catch (e) {

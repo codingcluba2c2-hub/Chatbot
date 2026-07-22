@@ -55,12 +55,16 @@ class LLMRouter:
         start_time = time.time()
         
         # Extract RAG context if any
-        rag_context = ""
-        if "rag_metrics" in context.metadata and context.metadata["rag_metrics"]["accepted_count"] > 0:
-            # Reconstruct RAG context from previous step or memory
-            pass # In reality, we'd pass the actual chunks. 
-            
-        system_prompt = "You are a highly secure Enterprise AI Assistant."
+        rag_context = context.metadata.get("rag_context", "")
+        
+        system_prompt = (
+            "You are a highly secure Enterprise AI Assistant.\n"
+            "STRICT RAG RULES:\n"
+            "1. If CONTEXT INFORMATION (RAG) is provided, you MUST base your entire answer on it.\n"
+            "2. NEVER invent facts, salaries, numerical figures, or use outside world knowledge if company data exists.\n"
+            "3. Maintain strict Markdown formatting. Preserve document headings, bullet points, numbered lists, and tables.\n"
+            "4. Do NOT combine unrelated chunks. Do NOT invent sections that do not exist in the context."
+        )
         
         prompt = PromptBuilder.build(
             user_message=context.original_message,
@@ -68,6 +72,8 @@ class LLMRouter:
             rag_context=rag_context,
             memory_facts={}
         )
+        context.metadata["llm_prompt"] = prompt
+        
         metrics["prompt_build_time_ms"] = (time.time() - start_time) * 1000
         
         # 3. Execute LLM
@@ -81,6 +87,8 @@ class LLMRouter:
             metrics["output_tokens"] = result.output_tokens
             metrics["cost"] = result.cost
             metrics["model"] = result.model
+            
+            context.metadata["llm_output"] = result.text
             
         except Exception as e:
             logger.error(f"LLM Provider Error: {e}")
@@ -110,7 +118,16 @@ _llm_instance = None
 def get_llm_provider():
     global _llm_instance
     if not _llm_instance:
-        _llm_instance = GroqProvider()
+        if os.environ.get("GROK_API_KEY"):
+            try:
+                _llm_instance = GrokProvider()
+            except Exception as e:
+                logger.error(f"Failed to init GrokProvider: {e}")
+                _llm_instance = GroqProvider() if os.environ.get("GROQ_API_KEY") else GeminiProvider()
+        elif os.environ.get("GROQ_API_KEY"):
+            _llm_instance = GroqProvider()
+        else:
+            _llm_instance = GeminiProvider()
     return _llm_instance
 
 
@@ -350,3 +367,64 @@ class GroqProvider(BaseLLMProvider):
             raise
 
 
+class GrokProvider(BaseLLMProvider):
+    def __init__(self):
+        super().__init__()
+        self.api_key = os.environ.get("GROK_API_KEY")
+        if not self.api_key:
+            logger.warning("GROK_API_KEY is not set. API calls will fail.")
+            
+    def generate(self, prompt: str, config: Dict[str, Any]) -> LLMResult:
+        if not self.api_key:
+            raise ValueError("Grok API Key is missing.")
+            
+        system_prompt = config.get("system_prompt", "You are a helpful assistant.")
+        temperature = config.get("temperature", 0.2)
+        max_tokens = config.get("max_tokens", 1000)
+        
+        url = "https://api.x.ai/v1/chat/completions"
+        
+        payload = {
+            "model": "grok-beta", 
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"{prompt}\n\nPlease output your final answer as a JSON object with a single key 'response' containing your text."}
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"}
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+        
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                result_data = json.loads(response.read().decode("utf-8"))
+                
+            output_text = result_data["choices"][0]["message"]["content"]
+            usage = result_data.get("usage", {})
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            
+            cost = ((input_tokens + output_tokens) / 1000000) * 0.10
+            
+            return LLMResult(
+                text=output_text,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost=cost,
+                model="grok-2-latest"
+            )
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            logger.error(f"Grok API Error: {e.code} - {error_body}")
+            raise RuntimeError(f"Grok generation failed: {error_body}")
+        except Exception as e:
+            logger.error(f"Grok Request Error: {e}")
+            raise

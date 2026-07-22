@@ -74,7 +74,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={
             "success": False,
-            "message": "Something went wrong."
+            "message": f"Error: {str(exc)}\n{traceback.format_exc()}"
         }
     )
 

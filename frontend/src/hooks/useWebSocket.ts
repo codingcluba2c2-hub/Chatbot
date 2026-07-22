@@ -11,29 +11,30 @@ export function useWebSocket(
   const maxReconnectAttempts = 10;
 
   const connect = useCallback(() => {
-    if (ws.current?.readyState === WebSocket.OPEN) return;
+    if (ws.current?.readyState === WebSocket.OPEN || ws.current?.readyState === WebSocket.CONNECTING) return;
 
-    ws.current = new WebSocket(url);
+    const socket = new WebSocket(url);
+    ws.current = socket;
 
-    ws.current.onopen = () => {
+    socket.onopen = () => {
       console.log('WebSocket connected');
       onStatusChange('online');
       reconnectAttempts.current = 0;
       
       // Start ping heartbeat
       const pingInterval = setInterval(() => {
-        if (ws.current?.readyState === WebSocket.OPEN) {
-          ws.current.send('ping');
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send('ping');
         } else {
           clearInterval(pingInterval);
         }
       }, 20000);
       
       // Store interval to clear on close
-      (ws.current as any)._pingInterval = pingInterval;
+      (socket as any)._pingInterval = pingInterval;
     };
 
-    ws.current.onmessage = (event) => {
+    socket.onmessage = (event) => {
       if (event.data === 'pong') return;
       try {
         const data = JSON.parse(event.data);
@@ -43,9 +44,9 @@ export function useWebSocket(
       }
     };
 
-    ws.current.onclose = () => {
-      if ((ws.current as any)?._pingInterval) {
-        clearInterval((ws.current as any)._pingInterval);
+    socket.onclose = () => {
+      if ((socket as any)?._pingInterval) {
+        clearInterval((socket as any)._pingInterval);
       }
       onStatusChange('offline');
       if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -57,10 +58,12 @@ export function useWebSocket(
       }
     };
 
-    ws.current.onerror = (error) => {
+    socket.onerror = (error) => {
       // Browsers often fire a generic Event that logs as {}
       console.error('WebSocket Error encountered.');
-      ws.current?.close();
+      if (ws.current === socket) {
+        ws.current.close();
+      }
     };
   }, [url, onMessageReceived, onStatusChange]);
 

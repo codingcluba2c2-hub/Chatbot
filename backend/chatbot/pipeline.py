@@ -142,6 +142,7 @@ class PipelineRunner:
                 
             # Context Store Automatic Update
             if hasattr(result, 'metadata') and result.metadata:
+                context.metadata.update(result.metadata)
                 from chatbot.memory import ConversationMemoryService
                 context_updates = {}
                 if "memory_intent" in result.metadata:
@@ -150,6 +151,8 @@ class PipelineRunner:
                     context_updates["current_topic"] = result.metadata["topic"]
                 if "knowledge_node" in result.metadata:
                     context_updates["last_knowledge_node"] = result.metadata["knowledge_node"]
+                if "rag_chunks" in result.metadata:
+                    context_updates["last_rag_chunks"] = result.metadata["rag_chunks"]
                 
                 if context_updates:
                     ConversationMemoryService.update_context(context.session_id, context_updates)
@@ -166,6 +169,16 @@ class PipelineRunner:
                 
         total_time = (time.perf_counter() - total_start) * 1000
         
+        # Part 6: Response Time Logging
+        logger.info("=========================================")
+        logger.info("PIPELINE EXECUTION SUMMARY")
+        logger.info("=========================================")
+        for trace in trace_steps:
+            logger.info(f"{trace['step_name']:<22} {trace['duration']:>6.0f} ms")
+        logger.info("-----------------------------------------")
+        logger.info(f"{'TOTAL':<22} {total_time:>6.0f} ms")
+        logger.info("=========================================")
+        
         from chatbot.memory import ConversationMemoryService
         context_updates = {
             "last_intent": final_intent
@@ -174,6 +187,32 @@ class PipelineRunner:
             context_updates["last_entities"] = list(context.entities.values())
             
         ConversationMemoryService.update_context(context.session_id, context_updates)
+        
+        from chatbot.state_manager import ConversationStateManager
+        
+        kn_node = context.metadata.get("knowledge_node", {})
+        kn_title = kn_node.get("title") if isinstance(kn_node, dict) else getattr(kn_node, "title", "")
+        
+        state_updates = {
+            "conversation_id": context.session_id,
+            "current_topic": context.metadata.get("topic") or context.entities.get("knowledge_search_topic") or "",
+            "current_entity": context.entities.get("current_entity") or kn_title or "",
+            "current_heading": context.entities.get("current_heading") or "",
+            "knowledge_node": context.metadata.get("knowledge_node") or "",
+            "intent": final_intent,
+            "retrieved_chunk_ids": [c.get("id") for c in context.metadata.get("rag_chunks", []) if "id" in c],
+            "last_user_query": context.original_message,
+            "last_rewritten_query": context.normalized_message,
+            "assistant_response": final_response,
+            "timestamp": time.time()
+        }
+        
+        # Only overwrite entity if a new one was explicitly discovered
+        # Otherwise, the StateManager keeps the old one!
+        if not state_updates["current_entity"]:
+            del state_updates["current_entity"]
+            
+        ConversationStateManager.update_state(context.session_id, state_updates)
         
         trace = None
         if DEVELOPER_MODE:
@@ -279,6 +318,7 @@ class PipelineRunner:
                 
                 # Context Store Automatic Update
                 if hasattr(result, 'metadata') and result.metadata:
+                    context.metadata.update(result.metadata)
                     from chatbot.memory import ConversationMemoryService
                     context_updates = {}
                     
@@ -288,6 +328,8 @@ class PipelineRunner:
                         context_updates["current_topic"] = result.metadata["topic"]
                     if "knowledge_node" in result.metadata:
                         context_updates["last_knowledge_node"] = result.metadata["knowledge_node"]
+                    if "rag_chunks" in result.metadata:
+                        context_updates["last_rag_chunks"] = result.metadata["rag_chunks"]
                     
                     if context_updates:
                         await asyncio.to_thread(ConversationMemoryService.update_context, context.session_id, context_updates)
@@ -306,8 +348,10 @@ class PipelineRunner:
                     # we stream its response artificially
                     if final_response:
                         # Fake streaming for UX
-                        for word in final_response.split(" "):
-                            yield {"type": "stream", "chunk": word + " "}
+                        words = final_response.split(" ")
+                        chunk_size = max(1, len(words) // 30) # Split into 30 frames
+                        for i in range(0, len(words), chunk_size):
+                            yield {"type": "stream", "chunk": " ".join(words[i:i+chunk_size]) + " "}
                             await asyncio.sleep(0.02)
                     break
                     
@@ -338,9 +382,7 @@ class PipelineRunner:
 
         total_time = (time.perf_counter() - total_start) * 1000
         
-        # Handle prefixes
-        if "greeting_prefix" in context.metadata and final_intent != "Greeting":
-            final_response = f"{context.metadata['greeting_prefix']}\n\n{final_response}"
+        # Global prefix handling is removed because individual steps handle it themselves
             
         from chatbot.memory import ConversationMemoryService
         context_updates = {
@@ -350,6 +392,30 @@ class PipelineRunner:
             context_updates["last_entities"] = list(context.entities.values())
             
         await asyncio.to_thread(ConversationMemoryService.update_context, context.session_id, context_updates)
+        
+        from chatbot.state_manager import ConversationStateManager
+        
+        kn_node = context.metadata.get("knowledge_node", {})
+        kn_title = kn_node.get("title") if isinstance(kn_node, dict) else getattr(kn_node, "title", "")
+        
+        state_updates = {
+            "conversation_id": context.session_id,
+            "current_topic": context.metadata.get("topic") or context.entities.get("knowledge_search_topic") or "",
+            "current_entity": context.entities.get("current_entity") or kn_title or "",
+            "current_heading": context.entities.get("current_heading") or "",
+            "knowledge_node": context.metadata.get("knowledge_node") or "",
+            "intent": final_intent,
+            "retrieved_chunk_ids": [c.get("id") for c in context.metadata.get("rag_chunks", []) if "id" in c],
+            "last_user_query": context.original_message,
+            "last_rewritten_query": context.normalized_message,
+            "assistant_response": final_response,
+            "timestamp": time.time()
+        }
+        
+        if not state_updates["current_entity"]:
+            del state_updates["current_entity"]
+            
+        await asyncio.to_thread(ConversationStateManager.update_state, context.session_id, state_updates)
         
         global_context = await asyncio.to_thread(ConversationMemoryService.get_context, context.session_id)
             

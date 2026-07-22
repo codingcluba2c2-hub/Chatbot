@@ -6,13 +6,11 @@ Flow: Early step in pipeline.
 """
 
 from datetime import datetime
-from chatbot.pipeline import PipelineContext
-from chatbot.pipeline import PipelineResult
 from rapidfuzz import process, fuzz
 from typing import Tuple, Optional
-import random
 import time
-import time
+from chatbot.memory import SessionManager
+from chatbot.pipeline import PipelineResult
 
 class GreetingEngine:
     # 1. Spelling dictionary for common greetings
@@ -22,66 +20,53 @@ class GreetingEngine:
         "good evening", "evening", "good night", "night", "gm", "gn"
     ]
     
-    # 2. Response Templates
+    # 2. Response Templates (Cyclical 3-step responses)
     TEMPLATES = {
         "GENERAL": [
-            "Hello! How can I help you today?", "Hi there!", "Nice to see you!",
-            "Hello again!", "Hey again!", "Hi 😊How can I help you today?",
-            "Hi! How can I assist you?", "Good to see you!",
-            "How can I help you today?", "What can I do for you?"
+            "Hello! How can I help you today?", 
+            "Hi again! What can I do for you?", 
+            "Hello once more! Ready when you are."
         ],
         "MORNING": [
-            "Good morning!", "Morning!", "Good morning 😊", "Morning 👋",
-            "Hope you're having a wonderful start to your day.", "Good morning! How can I help?",
-            "Top of the morning to you!", "Morning there!", "Good morning, friend!",
-            "Have a great morning! What can I do for you?"
+            "Good morning! How can I help you today?",
+            "Good morning again! What can I do for you?",
+            "Still morning here! Ready when you are."
         ],
         "AFTERNOON": [
-            "Good afternoon!", "Afternoon!", "Good afternoon 😊", "Afternoon 👋",
-            "Hope your afternoon is going well.", "Good afternoon! How can I help?",
-            "Good afternoon, friend!", "Afternoon there!", "Hope you're having a great day.",
-            "Good afternoon! What can I do for you?"
+            "Good afternoon! How can I help you today?",
+            "Good afternoon again! What can I do for you?",
+            "Still afternoon here! Ready when you are."
         ],
         "EVENING": [
-            "Good evening!", "Evening!", "Good evening 😊", "Evening 👋",
-            "Hope you had a great day.", "Good evening! How can I help?",
-            "Good evening, friend!", "Evening there!", "Hope your night is going well.",
-            "Good evening! What can I do for you?"
+            "Good evening! How can I help you today?",
+            "Good evening again! What can I do for you?",
+            "Still evening here! Ready when you are."
         ],
         "NIGHT": [
-            "Good night!", "Night!", "Good night 😊", "Night 👋",
-            "Hope you had a great day. Sleep well soon!", "Working late? How can I help?",
-            "Good night, friend!", "Night there!", "Have a restful night.",
-            "Good night! What can I do for you?"
+            "Good night! How can I help you today?",
+            "Good night again! What can I do for you?",
+            "Still night here! Ready when you are."
         ]
     }
     
-    REPEATS = [
-        "Hey again! How's everything going?",
-        "Hello again! Looks like we're greeting each other twice 😄 What would you like help with?",
-        "😄 We're stuck in a greeting loop. Tell me what you'd like to know.",
-        "Hi once more! Still here to help.",
-        "Hello again! Ready when you are."
-    ]
-
     def _normalize_greeting(self, text: str) -> Tuple[Optional[str], Optional[str], str]:
         """
-        Splits out the greeting, fuzzy-matches it, and returns (corrected_greeting, raw_greeting_matched, remaining_query).
+        Searches for a greeting anywhere in the text. Returns (corrected, matched_text, remaining_query).
         """
-        # We assume greetings are typically the first 1-3 words
         words = text.split()
-        for length in [3, 2, 1]:
-            if len(words) >= length:
-                potential_greeting = " ".join(words[:length])
-                
-                # Check dictionary
-                result = process.extractOne(potential_greeting.lower(), self.GREETING_DICTIONARY, scorer=fuzz.ratio)
-                if result:
-                    match, score, index = result
-                    if score >= 90:
-                        remaining = " ".join(words[length:])
-                        return match, potential_greeting, remaining
-                        
+        for i in range(len(words)):
+            # Try 3-word, 2-word, 1-word greetings starting at index i
+            for length in [3, 2, 1]:
+                if i + length <= len(words):
+                    potential = " ".join(words[i:i+length])
+                    result = process.extractOne(potential.lower(), self.GREETING_DICTIONARY, scorer=fuzz.ratio)
+                    if result:
+                        match, score, index = result
+                        if score >= 90:
+                            # Found a greeting! The remaining query is everything else
+                            remaining = " ".join(words[:i] + words[i+length:])
+                            return match, potential, remaining
+                            
         return None, None, text
 
     def _get_time_bucket(self, current_hour: int) -> str:
@@ -156,20 +141,47 @@ class GreetingEngine:
                 # Default mismatch
                 selected_template = f"Actually, it's {server_bucket.lower()} here! 😊 How can I help?"
         else:
-            # Normal template selection
+            # Normal template selection using cyclical rotation based on greeting_count
             pool = self.TEMPLATES.get(detected_bucket, self.TEMPLATES["GENERAL"])
-            selected_template = random.choice(pool)
+            index = (count - 1) % len(pool)
+            selected_template = pool[index]
             
-        # 6. Memory Integration
-        if user_name and "{name}" not in selected_template:
-            # Simply prepend name if not formatted natively
-            # Alternatively, we could inject it into the string.
-            # For this simple implementation, let's just use it if it's "Hi!" -> "Hi Name!"
-            if selected_template.startswith("Hi!"):
-                selected_template = selected_template.replace("Hi!", f"Hi {user_name}!")
-            elif selected_template.startswith("Hello!"):
-                selected_template = selected_template.replace("Hello!", f"Welcome back {user_name}!")
+        # Enterprise Grade Name Extraction
+        extracted_name = None
+        if remaining_query and len(remaining_query.split()) == 1:
+            lower_remaining = remaining_query.lower().strip()
+            excluded = ["there", "friend", "man", "bro", "how", "what", "can", "bot", "assistant", "again"]
+            # Basic gibberish check for the name (no >=4 consecutive consonants, has vowels)
+            import re
+            has_vowels = bool(re.search(r'[aeiouy]', lower_remaining))
+            has_smashes = bool(re.search(r'(.)\1{3,}', lower_remaining))
+            has_consonant_cluster = bool(re.search(r'[bcdfghjklmnpqrstvwxz]{4,}', lower_remaining))
+            
+            if not any(ex in lower_remaining for ex in excluded) and has_vowels and not has_smashes and not has_consonant_cluster:
+                extracted_name = remaining_query.title()
+                # Clear remaining query since it was just a name
+                remaining_query = ""
                 
+        final_user_name = extracted_name or user_name
+        
+        # Memory Integration
+        if final_user_name:
+            if extracted_name:
+                from chatbot.memory import ConversationMemoryService
+                ConversationMemoryService.update_context(session_id, {"preferred_name": extracted_name, "user_name": extracted_name})
+                
+            bold_name = f"**{final_user_name}**"
+                
+            if "{name}" in selected_template:
+                selected_template = selected_template.replace("{name}", bold_name)
+            else:
+                # Safely inject name before first punctuation, or append it if none
+                import re
+                if re.search(r'[!.,]', selected_template):
+                    selected_template = re.sub(r'^([^!.,]+)([!.,])', rf'\1 {bold_name}\2', selected_template, 1)
+                else:
+                    selected_template = f"{selected_template} {bold_name}"
+                    
         t1 = time.perf_counter()
         
         return {
@@ -188,8 +200,6 @@ class GreetingEngine:
             }
         }
 
-
-
 class GreetingFarewellStep(PipelineStep):
     def __init__(self):
         super().__init__()
@@ -207,15 +217,21 @@ class GreetingFarewellStep(PipelineStep):
             context.metadata.update(engine_result["metadata"])
             context.metadata["greeting_detected"] = True
             context.metadata["greeting_prefix"] = engine_result["response"]
-            context.metadata["routing"] = "Greeting -> STOP"
-            context.current_intent = "Greeting"
-            return PipelineResult(
-                continue_pipeline=False, 
-                stop=True, 
-                intent="Greeting", 
-                response=engine_result["response"]
-            )
-                
+            
+            remaining = engine_result.get("remaining_query", "").strip()
+            
+            if not remaining:
+                context.metadata["routing"] = "Greeting -> STOP"
+                context.current_intent = "Greeting"
+                return PipelineResult(
+                    continue_pipeline=False, 
+                    stop=True, 
+                    intent="Greeting", 
+                    response=engine_result["response"]
+                )
+            else:
+                context.metadata["routing"] = "Greeting -> CONTINUE"
+                context.normalized_message = remaining
         # Check Farewell
         from chatbot.detector import detect_farewell
         is_farewell, matched_pattern, confidence, response, remaining_query = detect_farewell(context.normalized_message)
@@ -240,187 +256,3 @@ class GreetingFarewellStep(PipelineStep):
                 context.normalized_message = remaining_query
         
         return PipelineResult(continue_pipeline=True)
-
-
-import random
-import time
-from datetime import datetime
-from rapidfuzz import process, fuzz
-from typing import Tuple, Optional
-from chatbot.memory import SessionManager
-
-class GreetingEngine:
-    # 1. Spelling dictionary for common greetings
-    GREETING_DICTIONARY = [
-        "hi", "hello", "hey", "heya", "yo", "greetings", 
-        "good morning", "morning", "good afternoon", "afternoon", 
-        "good evening", "evening", "good night", "night", "gm", "gn"
-    ]
-    
-    # 2. Response Templates
-    TEMPLATES = {
-        "GENERAL": [
-            "Hello! How can I help you today?", "Hi there!", "Nice to see you!",
-            "Hello again!", "Hey again!", "Hi 😊How can I help you today?",
-            "Hi! How can I assist you?", "Good to see you!",
-            "How can I help you today?", "What can I do for you?"
-        ],
-        "MORNING": [
-            "Good morning!", "Morning!", "Good morning 😊", "Morning 👋",
-            "Hope you're having a wonderful start to your day.", "Good morning! How can I help?",
-            "Top of the morning to you!", "Morning there!", "Good morning, friend!",
-            "Have a great morning! What can I do for you?"
-        ],
-        "AFTERNOON": [
-            "Good afternoon!", "Afternoon!", "Good afternoon 😊", "Afternoon 👋",
-            "Hope your afternoon is going well.", "Good afternoon! How can I help?",
-            "Good afternoon, friend!", "Afternoon there!", "Hope you're having a great day.",
-            "Good afternoon! What can I do for you?"
-        ],
-        "EVENING": [
-            "Good evening!", "Evening!", "Good evening 😊", "Evening 👋",
-            "Hope you had a great day.", "Good evening! How can I help?",
-            "Good evening, friend!", "Evening there!", "Hope your night is going well.",
-            "Good evening! What can I do for you?"
-        ],
-        "NIGHT": [
-            "Good night!", "Night!", "Good night 😊", "Night 👋",
-            "Hope you had a great day. Sleep well soon!", "Working late? How can I help?",
-            "Good night, friend!", "Night there!", "Have a restful night.",
-            "Good night! What can I do for you?"
-        ]
-    }
-    
-    REPEATS = [
-        "Hey again! How's everything going?",
-        "Hello again! Looks like we're greeting each other twice 😄 What would you like help with?",
-        "😄 We're stuck in a greeting loop. Tell me what you'd like to know.",
-        "Hi once more! Still here to help.",
-        "Hello again! Ready when you are."
-    ]
-
-    def _normalize_greeting(self, text: str) -> Tuple[Optional[str], Optional[str], str]:
-        """
-        Splits out the greeting, fuzzy-matches it, and returns (corrected_greeting, raw_greeting_matched, remaining_query).
-        """
-        # We assume greetings are typically the first 1-3 words
-        words = text.split()
-        for length in [3, 2, 1]:
-            if len(words) >= length:
-                potential_greeting = " ".join(words[:length])
-                
-                # Check dictionary
-                result = process.extractOne(potential_greeting.lower(), self.GREETING_DICTIONARY, scorer=fuzz.ratio)
-                if result:
-                    match, score, index = result
-                    if score >= 90:
-                        remaining = " ".join(words[length:])
-                        return match, potential_greeting, remaining
-                        
-        return None, None, text
-
-    def _get_time_bucket(self, current_hour: int) -> str:
-        if 5 <= current_hour < 12:
-            return "MORNING"
-        elif 12 <= current_hour < 17:
-            return "AFTERNOON"
-        elif 17 <= current_hour < 21:
-            return "EVENING"
-        else:
-            return "NIGHT"
-
-    def _get_greeting_bucket(self, corrected_greeting: str) -> str:
-        if "morning" in corrected_greeting or corrected_greeting == "gm":
-            return "MORNING"
-        elif "afternoon" in corrected_greeting:
-            return "AFTERNOON"
-        elif "evening" in corrected_greeting:
-            return "EVENING"
-        elif "night" in corrected_greeting or corrected_greeting == "gn":
-            return "NIGHT"
-        return "GENERAL"
-
-    def process(self, raw_message: str, session_id: str, user_name: Optional[str] = None) -> dict:
-        t0 = time.perf_counter()
-        
-        # 1. Normalize
-        corrected_greeting, original_greeting_matched, remaining_query = self._normalize_greeting(raw_message)
-        
-        if not corrected_greeting:
-            return {
-                "is_greeting": False,
-                "remaining_query": raw_message,
-                "execution_time_ms": int((time.perf_counter() - t0) * 1000)
-            }
-            
-        # 2. Determine Types
-        detected_bucket = self._get_greeting_bucket(corrected_greeting)
-        
-        # 3. Detect Server Time
-        current_dt = datetime.now()
-        server_hour = current_dt.hour
-        server_time_str = current_dt.strftime("%H:%M")
-        server_bucket = self._get_time_bucket(server_hour)
-        
-        # 4. Conversation Awareness
-        session = SessionManager.get_session(session_id) or {}
-        count = session.get("greeting_count", 0) + 1
-        SessionManager.update_session(session_id, {"greeting_count": count})
-        
-        # 5. Template Selection
-        selected_template = ""
-        
-        if detected_bucket != "GENERAL" and detected_bucket != server_bucket:
-            # Time Mismatch Handling
-            if detected_bucket == "MORNING":
-                if server_bucket in ["EVENING", "NIGHT"]:
-                    selected_template = f"Good {server_bucket.lower()}! 😊 Looks like it's already {server_bucket.lower()} here. How can I help you today?"
-                else:
-                    selected_template = f"Good {server_bucket.lower()}! Looks like it's {server_bucket.lower()} here. How can I assist you?"
-            elif detected_bucket == "NIGHT":
-                if server_bucket in ["MORNING", "AFTERNOON"]:
-                    selected_template = "Looks like it's still daytime 😊 How can I help you?"
-                else:
-                    selected_template = f"Good {server_bucket.lower()}! How can I assist you?"
-            elif detected_bucket == "EVENING":
-                if server_bucket == "MORNING":
-                    selected_template = "Good morning! 😊 Looks like it's morning here. How can I assist you?"
-                else:
-                    selected_template = f"Good {server_bucket.lower()}! How can I help you?"
-            else:
-                # Default mismatch
-                selected_template = f"Actually, it's {server_bucket.lower()} here! 😊 How can I help?"
-        else:
-            # Normal template selection
-            pool = self.TEMPLATES.get(detected_bucket, self.TEMPLATES["GENERAL"])
-            selected_template = random.choice(pool)
-            
-        # 6. Memory Integration
-        if user_name and "{name}" not in selected_template:
-            # Simply prepend name if not formatted natively
-            # Alternatively, we could inject it into the string.
-            # For this simple implementation, let's just use it if it's "Hi!" -> "Hi Name!"
-            if selected_template.startswith("Hi!"):
-                selected_template = selected_template.replace("Hi!", f"Hi {user_name}!")
-            elif selected_template.startswith("Hello!"):
-                selected_template = selected_template.replace("Hello!", f"Welcome back {user_name}!")
-                
-        t1 = time.perf_counter()
-        
-        return {
-            "is_greeting": True,
-            "response": selected_template,
-            "remaining_query": remaining_query,
-            "metadata": {
-                "greeting_type": detected_bucket,
-                "corrected_greeting": f"{original_greeting_matched} -> {corrected_greeting}",
-                "detected_time": server_time_str,
-                "time_bucket": server_bucket,
-                "greeting_count": count,
-                "selected_template": selected_template,
-                "remaining_query": remaining_query,
-                "execution_time_ms": int((t1 - t0) * 1000)
-            }
-        }
-
-

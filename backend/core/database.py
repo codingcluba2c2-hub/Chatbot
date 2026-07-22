@@ -25,10 +25,6 @@ engine = create_engine(
     pool_size=5,
     max_overflow=10,
     connect_args={
-        "keepalives": 1,
-        "keepalives_idle": 30,
-        "keepalives_interval": 10,
-        "keepalives_count": 5,
         "connect_timeout": 30
     }
 )

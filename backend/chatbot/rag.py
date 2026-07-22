@@ -11,8 +11,39 @@ from services.vectorstore import get_vector_store
 from chatbot.pipeline import PipelineContext
 from chatbot.pipeline import PipelineResult
 from chatbot.llm import get_llm_provider
+from core.config import USE_LLM_FOR_RAG
 from typing import List, Dict, Any
 import time
+
+def get_fallback_result(context: PipelineContext) -> PipelineResult:
+    text_lower = context.normalized_message.lower()
+    suggestions = []
+    
+    if "salary" in text_lower or "pay" in text_lower or "hr" in text_lower or "leave" in text_lower:
+        suggestions = ["Leave Policy", "Attendance", "HR Contact", "Employee Benefits"]
+    elif "tech" in text_lower or "software" in text_lower or "react" in text_lower or "node" in text_lower:
+        suggestions = ["AI Services", "React", "Node.js", "Cloud", "Projects"]
+    elif "company" in text_lower or "about" in text_lower or "founder" in text_lower:
+        suggestions = ["Founder", "Mission", "Vision", "Services", "Contact", "company about"]
+    else:
+        suggestions = ["Overview", "Office Timings", "Leave Policy", "Contact", "Services", "Career", "Help"]
+        
+    fallback_component = {
+        "type": "fallback",
+        "prefix": "I couldn't find any information related to",
+        "query": context.normalized_message,
+        "suffix": "in the current enterprise knowledge base.",
+        "suggestions": suggestions
+    }
+    
+    return PipelineResult(
+        continue_pipeline=False,
+        stop=True,
+        intent="Fallback",
+        response="",
+        components=[fallback_component],
+        metadata=context.metadata
+    )
 
 
 class KnowledgeSearchStep(PipelineStep):
@@ -28,8 +59,33 @@ class KnowledgeSearchStep(PipelineStep):
             return PipelineResult(continue_pipeline=True)
             
         search_query = context.normalized_message
-        
         t0 = time.time()
+        
+        # Check if ContextResolver provided context
+        if "ConversationContextResolver" in context.metadata:
+            last_chunks = context.metadata.get("previous_retrieved_chunks", [])
+            node_id = context.metadata.get("previous_knowledge_node")
+            
+            if not last_chunks and node_id:
+                from core.database import knowledge_node_repo
+                node = knowledge_node_repo.get_by_id(node_id)
+                if node:
+                    last_chunks = [{"text": getattr(node, "response_markdown", "") or getattr(node, "description", ""), "score": 1.0}]
+                    
+            if last_chunks:
+                logger.info(f"KnowledgeSearch bypassed: Reusing {len(last_chunks)} chunks from previous context.")
+                context_text = ""
+                for i, chunk in enumerate(last_chunks):
+                    text = chunk.get("text", "").strip()
+                    context_text += f"Document {i+1}:\n{text}\n\n"
+                    
+                context.metadata["rag_context"] = context_text
+                context.metadata["rag_chunks"] = last_chunks
+                context.metadata["knowledge_search_decision"] = "REUSED_CONTEXT"
+                context.metadata["retrieval_latency_ms"] = int((time.time() - t0) * 1000)
+                context.current_intent = "Knowledge (Context Reuse)"
+                return PipelineResult(continue_pipeline=True)
+        
         retriever = get_retriever()
         if not retriever:
             raise RuntimeError("Knowledge Search failed because Retriever could not be initialized.")
@@ -45,12 +101,7 @@ class KnowledgeSearchStep(PipelineStep):
         
         if not valid_chunks:
             context.metadata["knowledge_search_decision"] = "REJECTED (Low Similarity)"
-            return PipelineResult(
-                stop=True,
-                intent="Fallback",
-                response="Sorry, I couldn't find this information in the current knowledge base.",
-                metadata=context.metadata
-            )
+            return get_fallback_result(context)
             
         context.metadata["knowledge_search_decision"] = "EXECUTED"
         
@@ -63,9 +114,15 @@ class KnowledgeSearchStep(PipelineStep):
                 seen_texts.add(text)
                 unique_chunks.append(c)
                 
-        # Rerank (Stub: Sorting by lexical density + score as a secondary metric)
-        # Assuming Qdrant already gives good vector similarity, we sort them by score.
-        unique_chunks.sort(key=lambda x: x.get("score", 0), reverse=True)
+        # Lexical Reranking: promote chunks that have high keyword overlap with the query
+        query_words = set(search_query.lower().split())
+        for c in unique_chunks:
+            text_lower = c.get("text", "").lower()
+            lexical_matches = sum(1 for w in query_words if w in text_lower)
+            # Combine vector score with lexical density (simple hybrid)
+            c["rerank_score"] = c.get("score", 0) + (lexical_matches * 0.05)
+            
+        unique_chunks.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
         
         # Keep best 3 chunks
         final_chunks = unique_chunks[:3]
@@ -83,9 +140,30 @@ class KnowledgeSearchStep(PipelineStep):
         context.metadata["retrieval_latency_ms"] = int((t1 - t0) * 1000)
         context.current_intent = "Knowledge"
         
-        # If the query is short, register it as the active entity for follow-ups
-        if len(search_query.split()) <= 4:
-            context.entities["knowledge_search_topic"] = search_query
+        # Register the primary entity for the ConversationStateManager
+        best_title = final_chunks[0].get("metadata", {}).get("title") if final_chunks and "metadata" in final_chunks[0] else None
+        
+        entity = best_title or search_query
+        heading = ""
+        
+        if entity:
+            lower_entity = entity.lower()
+            
+            # If the entity is literally just the heading, fallback to search query
+            if lower_entity == "overview" or lower_entity == "details":
+                heading = entity
+                entity = search_query
+            else:
+                if " overview" in lower_entity:
+                    heading = "Overview"
+                    entity = entity.replace(" Overview", "").replace(" overview", "").strip()
+                elif " details" in lower_entity:
+                    heading = "Details"
+                    entity = entity.replace(" Details", "").replace(" details", "").strip()
+                
+        context.entities["current_entity"] = entity
+        context.entities["current_heading"] = heading
+        context.entities["knowledge_search_topic"] = search_query
         
         return PipelineResult(continue_pipeline=True)
 
@@ -106,61 +184,65 @@ class ResponseGeneratorStep(PipelineStep):
             t1 = time.perf_counter()
             context.metadata["llm_latency_ms"] = int((t1 - t0) * 1000)
             context.metadata["fallback_used"] = True
-            context.metadata["gemini_used"] = False
+            context.metadata["llm_used"] = False
             
             context.current_intent = "Fallback"
             
-            # Sub-ms deterministic suggestion engine
-            text_lower = context.normalized_message.lower()
-            suggestions = []
-            
-            if "salary" in text_lower or "pay" in text_lower or "hr" in text_lower or "leave" in text_lower:
-                suggestions = ["Leave Policy", "Attendance", "HR Contact", "Employee Benefits"]
-            elif "tech" in text_lower or "software" in text_lower or "react" in text_lower or "node" in text_lower:
-                suggestions = ["AI Services", "React", "Node.js", "Cloud", "Projects"]
-            elif "company" in text_lower or "about" in text_lower or "founder" in text_lower:
-                suggestions = ["Founder", "Mission", "Vision", "Services", "Contact", "company about"]
-            else:
-                suggestions = ["Overview", "Office Timings", "Leave Policy", "Contact", "Services", "Career", "Help"]
-                
-            from components.factory import ComponentBuilder
-            fallback_component = ComponentBuilder.fallback(context.normalized_message, suggestions)
-            
-            # Keep string response empty, let frontend render the component
-            final_response = ""
-            
-            # Developer mode metrics
-            context.metadata["fallback_trigger"] = decision
-            context.metadata["suggestions_generated"] = len(suggestions)
             context.metadata["response_source"] = "Fallback"
                 
-            return PipelineResult(
-                continue_pipeline=False,
-                stop=True,
-                intent="Fallback",
-                response=final_response,
-                components=[fallback_component]
-            )
+            return get_fallback_result(context)
             
         # We have chunks, let's use the context built in KnowledgeSearchStep
         filtered_context = context.metadata.get("rag_context", "")
         
+        if not USE_LLM_FOR_RAG:
+            final_response = filtered_context.replace("Document 1:\n", "").strip() # Minimal formatting for raw
+            # Remove "Document X:\n" prefixes if multiple chunks to keep it clean
+            import re
+            final_response = re.sub(r"Document \d+:\n", "", final_response).strip()
+            
+            t1 = time.perf_counter()
+            context.metadata["llm_latency_ms"] = 0
+            context.metadata["llm_used"] = False
+            context.metadata["fallback_used"] = False
+            context.current_intent = "Knowledge"
+            
+            greeting_prefix = context.metadata.get("greeting_prefix", "")
+            if greeting_prefix:
+                final_response = f"{greeting_prefix}\n\n{final_response}"
+                
+            return PipelineResult(
+                continue_pipeline=False,
+                stop=True,
+                intent="Knowledge",
+                response=final_response
+            )
+            
         provider = get_llm_provider()
-        gemini_success = False
+        llm_success = False
         final_response = ""
         final_intent = ""
         
         if provider:
             system_prompt = (
-                "You are an enterprise AI assistant.\n"
-                "Use ONLY the supplied context.\n"
-                "Never invent information.\n"
-                "Never answer using external knowledge.\n"
-                "If the context is insufficient, say you couldn't find the information."
+                "You are an enterprise knowledge assistant.\n"
+                "Answer ONLY using the provided context. Your goal is to make the answer readable, professional and conversational.\n"
+                "Generate rich, structured responses using Markdown formatting. Use headings (#, ##), bold (**), bullet lists (•), numbered lists, and short paragraphs.\n"
+                "Do not expose metadata, chunk IDs, similarity scores, or payload fields.\n"
+                "Convert the retrieved information into a well-formatted markdown response. Preserve headings, lists, and hierarchy when available in the context.\n"
+                "Do NOT invent headings or create fake sections. If the chunk contains a single paragraph, return a single paragraph.\n"
+                "Never merge everything into one paragraph. Keep paragraph separation.\n"
+                "Never invent information. Do not hallucinate. Do not use external knowledge.\n"
+                "Do not remove important information or aggressively summarize. Preserve useful details.\n"
+                "Choose response length dynamically: small question -> short answer (2-4 lines), broad question -> comprehensive response (150-300 words).\n"
+                "If the user asks about a specific topic (e.g., 'What is salary?'), return ONLY that information. Do not include unrelated info.\n"
+                "If the user asks a broad topic (e.g., 'Tell me about Product Designer'), return a full overview (Overview, Skills, Experience, Education, Salary) if present.\n"
+                "The context may contain noisy text from PDFs. Ignore noise and extract ONLY what matches the query.\n"
+                "Only say you couldn't find the information if the query is TRULY not mentioned anywhere."
             )
             
             try:
-                prompt = f"Question: {context.normalized_message}\n\nContext:\n{filtered_context}"
+                prompt = f"User Query: {context.normalized_message}\n\nContext:\n{filtered_context}\n\nPlease provide a helpful, richly formatted markdown response based ONLY on the context."
                 config = {
                     "system_prompt": system_prompt,
                     "temperature": 0.2
@@ -175,23 +257,22 @@ class ResponseGeneratorStep(PipelineStep):
                 except:
                     final_response = result.text
                 final_intent = "Knowledge"
-                gemini_success = True
+                llm_success = True
                 
-                context.metadata["gemini_used"] = True
+                context.metadata["llm_used"] = True
                 context.metadata["fallback_used"] = False
                 
             except Exception as e:
-                logger.error(f"Gemini generation failed: {e}. Switching to Local Response Generator.")
-                gemini_success = False
+                logger.error(f"LLM generation failed: {e}. Switching to fallback.")
+                llm_success = False
                 
-        # If Gemini failed (e.g. 429 quota, timeout), use local fallback
-        if not gemini_success:
-            logger.warning("Gemini generation failed, returning fallback message.")
-            final_response = "Sorry, I couldn't find this information in the current knowledge base."
-            final_intent = "Knowledge (Fallback)"
-            
-            context.metadata["gemini_used"] = False
+        # If LLM failed (e.g. 429 quota, timeout), use local fallback
+        if not llm_success:
+            logger.warning("LLM generation failed, returning fallback message.")
+            context.metadata["llm_used"] = False
             context.metadata["fallback_used"] = True
+            
+            return get_fallback_result(context)
             
         t1 = time.perf_counter()
         context.metadata["llm_latency_ms"] = int((t1 - t0) * 1000)
@@ -202,13 +283,7 @@ class ResponseGeneratorStep(PipelineStep):
             context.metadata["fallback_used"] = True
             context.metadata["response_source"] = "LLM Rejected (Fallback Triggered)"
             
-            return PipelineResult(
-                continue_pipeline=False,
-                stop=True,
-                intent="Fallback",
-                response="Sorry, I couldn't find this information in the current knowledge base.",
-                components=[]
-            )
+            return get_fallback_result(context)
         
         # Prepend greeting if present
         greeting_prefix = context.metadata.get("greeting_prefix", "")
@@ -219,7 +294,8 @@ class ResponseGeneratorStep(PipelineStep):
             continue_pipeline=False,
             stop=True,
             intent=final_intent,
-            response=final_response
+            response=final_response,
+            metadata={"llm_used": context.metadata.get("llm_used", False)}
         )
 
 
@@ -353,13 +429,6 @@ def get_retriever() -> Retriever:
         print("Retriever Ready")
     return _retriever_instance
 
-_retriever_instance = None
 
-def get_retriever() -> Retriever:
-    global _retriever_instance
-    if not _retriever_instance:
-        _retriever_instance = Retriever()
-        print("Retriever Ready")
-    return _retriever_instance
 
 

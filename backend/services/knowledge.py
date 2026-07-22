@@ -10,9 +10,13 @@ from typing import List, Optional
 import os
 import shutil
 import time
+from core.database import document_repo, log_audit
 from core.schemas import *
 from core.models import *
-from core.database import document_repo
+from services.extraction import ExtractionEngine
+from services.chunking import ChunkingEngine
+from services.embeddings import get_embedding_provider
+from services.vectorstore import get_vector_store
 
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
@@ -390,6 +394,16 @@ class KnowledgeTreeStep(PipelineStep):
             title = result.get("title", "")
             children = result.get("children", [])
             breadcrumbs = result.get("breadcrumbs", [])
+            
+            # Enterprise Entity Extraction:
+            # We must lock onto the root topic (e.g. 'Product Designer') using breadcrumbs.
+            root_entity = breadcrumbs[0].get("title") if breadcrumbs else title
+            
+            # The heading is the actual matched node (e.g. 'Overview')
+            heading = title if title != root_entity else ""
+            
+            context.entities["current_entity"] = root_entity
+            context.entities["current_heading"] = heading
             
             response = markdown if markdown else f"Found information for {title}."
             

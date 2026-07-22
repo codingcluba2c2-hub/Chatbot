@@ -21,7 +21,7 @@ class FAQStep(PipelineStep):
             final_response = ResponseService.get_sequential_response(
                 context.session_id,
                 f"faq_{matched_question}",
-                [answer]
+                answer
             )
             greeting_prefix = context.metadata.get("greeting_prefix", "")
             if greeting_prefix:
