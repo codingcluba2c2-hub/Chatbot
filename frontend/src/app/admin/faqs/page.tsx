@@ -108,7 +108,7 @@ function AliasBadges({ aliases }: { aliases: string[] }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function FAQsPage() {
-  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
+  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8001').replace(/\/+$/, "");
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState("");

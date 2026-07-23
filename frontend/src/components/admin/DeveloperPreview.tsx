@@ -17,7 +17,7 @@ export function DeveloperPreview({ onClose }: { onClose: () => void }) {
     setResult(null);
     
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8001';
       const response = await fetch(`${backendUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

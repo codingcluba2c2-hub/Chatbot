@@ -25,6 +25,7 @@ export type MessageProps = {
   format?: 'markdown' | 'text';
   onReplay?: () => void;
   onAction?: (action: string, payload?: any) => void;
+  onSpeak?: (text: string) => void;
 };
 
 const getIntentColor = (intent?: string) => {
@@ -133,7 +134,7 @@ const MarkdownRenderer = React.memo(({ content }: { content: string }) => {
   );
 });
 
-export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, timestamp, status, trace, components, actions, format: msgFormat, onReplay, onAction }) => {
+export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, timestamp, status, trace, components, actions, format: msgFormat, onReplay, onAction, onSpeak }) => {
   const isBot = role === 'bot';
   const [isCopied, setIsCopied] = useState(false);
   
@@ -273,6 +274,17 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
             <Tooltip content="Replay Pipeline">
               <button onClick={onReplay} className="p-1.5 rounded-md bg-white border border-emerald-100 shadow-sm text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 transition-all ml-1">
                 <RefreshCw size={14} />
+              </button>
+            </Tooltip>
+          )}
+
+          {isBot && onSpeak && (
+            <Tooltip content="Read Aloud">
+              <button onClick={() => {
+                console.log("Read Aloud button clicked", content);
+                onSpeak(content);
+              }} className="p-1.5 rounded-md bg-white border border-blue-100 shadow-sm text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 transition-all ml-1">
+                <Volume2 size={14} />
               </button>
             </Tooltip>
           )}

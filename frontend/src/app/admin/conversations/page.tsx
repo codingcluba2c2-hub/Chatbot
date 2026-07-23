@@ -10,7 +10,7 @@ export default function ConversationsPage() {
   const [formData, setFormData] = useState<any>({});
   
   const queryClient = useQueryClient();
-  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
+  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8001').replace(/\/+$/, "");
   const apiUrl = `${backendUrl}/api/admin/greetings`;
 
   const { data, isLoading } = useQuery({

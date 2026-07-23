@@ -12,7 +12,7 @@ interface DeveloperSidebarProps {
 }
 
 export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onClose, messages, selectedMessageId }) => {
-  const [activeTab, setActiveTab] = useState<'pipeline' | 'routing' | 'logs'>('pipeline');
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'routing' | 'logs' | 'context'>('pipeline');
 
   // Find the selected message trace, or default to the latest bot message
   let selectedMessage = messages.find(m => m.id === selectedMessageId);

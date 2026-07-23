@@ -13,6 +13,10 @@ import { Toast } from "@/components/chat/Toast";
 import { DeveloperSidebar } from "@/components/dev/DeveloperSidebar";
 import { MemoryService } from "@/services/MemoryService";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { voiceOutputService } from '@/services/VoiceOutputService';
+import { DEFAULT_SPEECH_SETTINGS, VoiceState } from "@/types/speech";
 
 export default function Home() {
   const [sessionId, setSessionId] = useState("");
@@ -39,6 +43,36 @@ export default function Home() {
   const [isDevModeOpen, setIsDevModeOpen] = useState(false);
   const [selectedTraceMessageId, setSelectedTraceMessageId] = useState<string | null>(null);
   
+  // Voice States
+  const [speechSettings, setSpeechSettings] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('speechSettings');
+      if (saved) {
+        try {
+          return { ...DEFAULT_SPEECH_SETTINGS, ...JSON.parse(saved) };
+        } catch (e) {}
+      }
+    }
+    return DEFAULT_SPEECH_SETTINGS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('speechSettings', JSON.stringify(speechSettings));
+  }, [speechSettings]);
+
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  
+  // Refs for WS callback
+  const voiceStateRef = useRef(voiceState);
+  useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
+  const speechSettingsRef = useRef(speechSettings);
+  useEffect(() => { speechSettingsRef.current = speechSettings; }, [speechSettings]);
+
+  const [lastSpokenMessageId, setLastSpokenMessageId] = useState<string | null>(null);
+
+  const { voices, isSpeaking, speak, stopSpeaking } = useSpeechSynthesis();
+
   const inputRef = useRef<InputAreaRef>(null);
 
   const avgResponseTime = responseTimes.length > 0 
@@ -48,6 +82,9 @@ export default function Home() {
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
   }, []);
+
+  const speakRef = useRef(speak);
+  useEffect(() => { speakRef.current = speak; }, [speak]);
 
   // WebSocket Connection
   const handleWsMessage = useCallback((data: any) => {
@@ -100,12 +137,31 @@ export default function Home() {
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last && last.role === 'bot') {
+            const hasVoice = last.trace?.steps?.some((s: any) => s.step_name === 'SpeechRecognition');
+            const newSteps = [...(data.trace?.steps || [])];
+            
+            if (hasVoice) {
+               newSteps.unshift(last.trace.steps[0]); // Add speech recognition to front
+               newSteps.push({
+                 step_name: 'VoiceOutputStep',
+                 status: 'success',
+                 duration: 50,
+                 metadata: {
+                   voiceEnabled: true,
+                   autoSpeak: speechSettings.autoSpeak,
+                   voiceName: speechSettings.voiceURI || 'Default System Voice',
+                   characters: (data.response || '').length,
+                   speechStatus: 'Spoken'
+                 }
+               });
+            }
+
             return [...prev.slice(0, -1), { 
               ...last, 
               intent: data.intent, 
               components: data.components, 
               actions: data.actions, 
-              trace: { ...last.trace, totalBackendTimeMs: data.trace?.totalBackendTimeMs },
+              trace: { ...last.trace, ...data.trace, steps: newSteps, totalBackendTimeMs: data.trace?.totalBackendTimeMs },
               content: data.response || last.content 
             }];
         }
@@ -119,6 +175,30 @@ export default function Home() {
           if (a.type === 'UPDATE_MEMORY') MemoryService.updateMemory(a.payload);
         });
       }
+      
+      if (voiceStateRef.current === 'waiting_response') {
+        console.log("AI Response Received");
+        if (data.response) {
+          speakRef.current(
+            data.response, 
+            speechSettingsRef.current,
+            () => setVoiceState('speaking'),
+            () => setVoiceState('idle'),
+            () => setVoiceState('idle')
+          );
+        } else {
+          setVoiceState('idle');
+        }
+      } else if (speechSettingsRef.current.autoSpeak && data.response) {
+        // If text-only input but Auto Speak is globally enabled
+        speakRef.current(
+          data.response,
+          speechSettingsRef.current,
+          () => setVoiceState('speaking'),
+          () => setVoiceState('idle'),
+          () => setVoiceState('idle')
+        );
+      }
     }
   }, []);
 
@@ -127,14 +207,23 @@ export default function Home() {
 
   useEffect(() => {
     let api = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-    if (!api && typeof window !== "undefined") {
-      api = `http://${window.location.hostname}:8001`;
+    if (typeof window !== "undefined") {
+      if (!api) {
+        api = `http://${window.location.hostname}:8001`;
+      } else if (api.includes("localhost") || api.includes("127.0.0.1")) {
+        // If the env var says localhost but we are accessing via a network IP, rewrite it
+        api = api.replace("localhost", window.location.hostname).replace("127.0.0.1", window.location.hostname);
+      }
     }
     setBackendUrl(api);
     
     let ws = process.env.NEXT_PUBLIC_WS_URL || "";
-    if (!ws && api) {
-      ws = api.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
+    if (typeof window !== "undefined") {
+      if (!ws && api) {
+        ws = api.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
+      } else if (ws && (ws.includes("localhost") || ws.includes("127.0.0.1"))) {
+        ws = ws.replace("localhost", window.location.hostname).replace("127.0.0.1", window.location.hostname);
+      }
     }
     setWsUrl(ws);
   }, []);
@@ -178,7 +267,7 @@ export default function Home() {
 
   const handleClearChat = useCallback(async () => {
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8001';
       await fetch(`${backendUrl}/api/session/clear?session_id=${sessionId}`, { method: 'DELETE' });
     } catch (e) {
       console.error("Failed to clear backend session:", e);
@@ -191,7 +280,56 @@ export default function Home() {
     focusInput();
   }, [focusInput, showToast, sessionId]);
 
-  const sendMessage = useCallback(async (textToSend: string, metadata: any = {}) => {
+  const handleVoiceError = useCallback((error: string) => {
+    showToast(error);
+    setVoiceState('idle');
+    setVoiceTranscript('');
+  }, [showToast]);
+
+  const { isListening, startListening, stopListening, cancelListening } = useSpeechRecognition(
+    speechSettings.language,
+    {
+      onStateChange: (state) => setVoiceState(state),
+      onTranscript: (transcript) => setVoiceTranscript(transcript),
+      onEnd: (transcript) => {
+        if (transcript && transcript.trim().length > 1) {
+          console.log("Transcript Submitted");
+          setVoiceState('sending');
+          voiceStateRef.current = 'waiting_response'; // Update ref synchronously for fast WS responses
+          sendMessageRef.current(transcript, {}, true); // true for isVoice
+          setVoiceState('waiting_response');
+          setVoiceTranscript('');
+        } else {
+          setVoiceState('idle');
+          setVoiceTranscript('');
+        }
+      },
+      onError: handleVoiceError
+    }
+  );
+
+  const toggleVoice = useCallback(() => {
+    // Unlock the speech synthesis engine on user gesture to prevent browser blocking
+    voiceOutputService.unlock();
+    
+    if (voiceState === 'idle') {
+      setVoiceState('listening');
+      startListening();
+    } else if (voiceState === 'listening' || voiceState === 'recognizing') {
+      stopListening(); // This triggers final result, which sends the message
+    } else if (voiceState === 'speaking') {
+      stopSpeaking();
+      setVoiceState('idle');
+    }
+  }, [voiceState, startListening, stopListening, stopSpeaking]);
+
+  const cancelVoice = useCallback(() => {
+    cancelListening();
+    setVoiceState('idle');
+    setVoiceTranscript('');
+  }, [cancelListening]);
+
+  const sendMessage = useCallback(async (textToSend: string, metadata: any = {}, isVoice: boolean = false) => {
     if (!textToSend) return;
     if (botState !== 'idle') return;
 
@@ -209,7 +347,21 @@ export default function Home() {
       role: "bot",
       content: "",
       timestamp: Date.now(),
-      format: "markdown"
+      format: "markdown",
+      trace: isVoice ? {
+        steps: [
+          {
+            step_name: 'SpeechRecognition',
+            status: 'success',
+            duration: 800, // mock duration
+            metadata: {
+              transcript: textToSend,
+              language: speechSettings.language,
+              confidence: '95%'
+            }
+          }
+        ]
+      } : undefined
     };
 
     setMessages((prev) => [...prev, userMessage, botMessage]);
@@ -257,9 +409,29 @@ export default function Home() {
         setBackendStatus('offline');
         showToast("Unable to reach backend.");
         focusInput();
+        
+        if (voiceStateRef.current === 'waiting_response') {
+          if (speechSettingsRef.current.autoSpeak) {
+             speakRef.current(
+               "Sorry, I couldn't process your request.", 
+               speechSettingsRef.current,
+               () => setVoiceState('speaking'),
+               () => setVoiceState('idle'),
+               () => setVoiceState('idle')
+             );
+          } else {
+             setVoiceState('idle');
+          }
+        }
       }, 0);
     }
   }, [botState, focusInput, showToast, sessionId, conversationId]);
+
+  // Use a ref to always access the latest sendMessage without triggering hook re-renders
+  const sendMessageRef = useRef(sendMessage);
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  }, [sendMessage]);
 
   const sendActionMessage = useCallback(async (actionType: string, payload: any) => {
     if (botState !== 'idle') return;
@@ -275,6 +447,24 @@ export default function Home() {
   const handleSuggestionClick = useCallback((suggestion: string) => {
     sendMessage(suggestion);
   }, [sendMessage]);
+
+
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+M to toggle mic
+      if (e.ctrlKey && e.key === 'm') {
+        e.preventDefault();
+        toggleVoice();
+      }
+      if (e.key === 'Escape' && (voiceState === 'listening' || voiceState === 'speaking')) {
+        cancelVoice();
+        stopSpeaking();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [toggleVoice, cancelVoice, stopSpeaking, voiceState]);
 
   const handleSend = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -354,7 +544,7 @@ export default function Home() {
       </div>
 
       {/* Floating Pill Launcher */}
-      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 lg:bottom-10 lg:right-10 z-40 group cursor-pointer" onClick={() => setIsChatOpen(!isChatOpen)}>
+      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 lg:bottom-10 lg:right-10 z-[100] group cursor-pointer" onClick={() => { console.log("Pill clicked. Current state:", isChatOpen); setIsChatOpen(!isChatOpen); }}>
         <div className={`absolute inset-0 bg-blue-500 rounded-full blur-xl transition-all duration-500 ${isChatOpen ? 'opacity-0' : 'opacity-40 group-hover:opacity-60 animate-glow-pulse'}`} />
         
         <div className={`relative h-[56px] flex items-center rounded-full bg-white shadow-2xl transition-all duration-300 transform ${isChatOpen ? 'scale-90 opacity-0 pointer-events-none' : 'scale-100 opacity-100 hover:scale-105'} pr-[4px] pl-5 overflow-hidden`}>
@@ -402,6 +592,15 @@ export default function Home() {
                 setIsDevModeOpen(true);
               }}
               onAction={sendActionMessage}
+              onSpeak={(text) => {
+                speakRef.current(
+                  text, 
+                  speechSettingsRef.current, 
+                  () => setVoiceState('speaking'), 
+                  () => setVoiceState('idle'), 
+                  () => setVoiceState('idle')
+                );
+              }}
             />
             
             <InputArea 
@@ -411,6 +610,13 @@ export default function Home() {
               handleSend={handleSend} 
               isLoading={botState !== 'idle'} 
               onSuggestionClick={handleSuggestionClick}
+              voiceState={voiceState}
+              onVoiceToggle={toggleVoice}
+              onVoiceCancel={cancelVoice}
+              voiceTranscript={voiceTranscript}
+              speechSettings={speechSettings}
+              setSpeechSettings={setSpeechSettings}
+              voices={voices}
             />
           </motion.div>
         )}

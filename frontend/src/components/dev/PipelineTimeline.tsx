@@ -46,6 +46,24 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
 
     let stages: any[] = [];
 
+    // Stage 0: Speech Recognition (Voice Input)
+    const speechRecogStep = getStep('SpeechRecognition');
+    if (speechRecogStep) {
+      stages.push({
+        id: 'speech_recognition',
+        title: 'Speech Recognition',
+        icon: '🎤',
+        status: 'Completed',
+        color: 'blue',
+        duration: speechRecogStep.duration,
+        details: [
+          { label: 'Language', value: speechRecogStep.metadata?.language || 'N/A' },
+          { label: 'Confidence', value: speechRecogStep.metadata?.confidence || 'N/A' },
+          { label: 'Final Transcript', value: speechRecogStep.metadata?.transcript || 'N/A' }
+        ]
+      });
+    }
+
     // Stage 1: Normalize
     if (normalizeStep) {
       stages.push({
@@ -79,7 +97,7 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
     }
 
     // Stage 3: Intent
-    const actualIntent = intentRouterStep?.metadata?.route || trace.steps[trace.steps.length - 1]?.intent || 'Unknown';
+    const actualIntent = intentRouterStep?.metadata?.route || (trace.steps[trace.steps.length - 1] as any)?.intent || 'Unknown';
     stages.push({
       id: 'intent',
       title: 'Intent Detection',
@@ -181,7 +199,27 @@ export const PipelineTimeline: React.FC<{ trace: Trace, mode: 'timeline' | 'grap
       });
     }
 
-    // Stage 10: Final Response
+    // Stage 10: Speech Synthesis (Voice Output)
+    const voiceOutputStep = getStep('VoiceOutputStep');
+    if (voiceOutputStep) {
+      stages.push({
+        id: 'voice_output',
+        title: 'Voice Output',
+        icon: '🔊',
+        status: voiceOutputStep.status === 'success' ? 'Completed' : 'Failed',
+        color: voiceOutputStep.status === 'success' ? 'blue' : 'red',
+        duration: voiceOutputStep.duration,
+        details: [
+          { label: 'Voice Enabled', value: voiceOutputStep.metadata?.voiceEnabled ? 'Yes' : 'No' },
+          { label: 'Auto Speak Enabled', value: voiceOutputStep.metadata?.autoSpeak ? 'Yes' : 'No' },
+          { label: 'Voice Name', value: voiceOutputStep.metadata?.voiceName || 'System Voice' },
+          { label: 'Characters Spoken', value: voiceOutputStep.metadata?.characters || 0 },
+          { label: 'Speech Status', value: voiceOutputStep.metadata?.speechStatus || 'N/A' },
+        ]
+      });
+    }
+
+    // Stage 11: Final Response
     stages.push({
       id: 'final',
       title: 'Final Response',

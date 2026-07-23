@@ -11,9 +11,10 @@ interface ChatBodyProps {
   onSuggestionClick: (suggestion: string) => void;
   onReplayMessage?: (id: string) => void;
   onAction?: (action: string, payload?: any) => void;
+  onSpeak?: (text: string) => void;
 }
 
-export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSuggestionClick, onReplayMessage, onAction }) => {
+export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSuggestionClick, onReplayMessage, onAction, onSpeak }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -119,6 +120,7 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
                       {...msg} 
                       onReplay={onReplayMessage && msg.trace ? () => onReplayMessage(msg.id) : undefined} 
                       onAction={onAction}
+                      onSpeak={onSpeak}
                     />
                   )}
                 </React.Fragment>

@@ -3,6 +3,12 @@ import { Send, Menu, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Tooltip } from './Tooltip';
+import { VoiceButton } from './voice/VoiceButton';
+import { VoiceTranscript } from './voice/VoiceTranscript';
+import { VoiceSettings } from './voice/VoiceSettings';
+import { VoiceState, SpeechSettings } from '../../types/speech';
+import { Settings2 } from 'lucide-react';
+import { useState } from 'react';
 
 export interface InputAreaRef {
   focus: () => void;
@@ -14,10 +20,23 @@ interface InputAreaProps {
   handleSend: (e: React.FormEvent) => void;
   isLoading: boolean;
   onSuggestionClick: (suggestion: string) => void;
+  // Voice Props
+  voiceState: VoiceState;
+  onVoiceToggle: () => void;
+  onVoiceCancel: () => void;
+  voiceTranscript: string;
+  speechSettings: SpeechSettings;
+  setSpeechSettings: React.Dispatch<React.SetStateAction<SpeechSettings>>;
+  voices: SpeechSynthesisVoice[];
 }
 
-export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setInput, handleSend, isLoading, onSuggestionClick }, ref) => {
+export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ 
+  input, setInput, handleSend, isLoading, onSuggestionClick,
+  voiceState, onVoiceToggle, onVoiceCancel, voiceTranscript,
+  speechSettings, setSpeechSettings, voices
+}, ref) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -50,30 +69,47 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
       {/* Input Form */}
       <form onSubmit={handleSend} className="relative flex items-end gap-2 bg-white dark:bg-slate-900 border-2 border-gray-200/80 dark:border-slate-700/80 rounded-3xl px-3 py-1.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300">
 
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="Type your message..."
-          rows={1}
-          className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-[13px] md:text-[14px] py-2 px-2 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-800 dark:text-gray-100 font-medium leading-relaxed"
-        />
+        {/* Textarea or Voice Transcript */}
+        {voiceState === 'idle' ? (
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Type your message..."
+            rows={1}
+            className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-[13px] md:text-[14px] py-2 px-2 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-800 dark:text-gray-100 font-medium leading-relaxed"
+          />
+        ) : (
+          <div className="flex-1">
+            <VoiceTranscript 
+              transcript={voiceTranscript}
+              state={voiceState}
+              onCancel={onVoiceCancel}
+            />
+          </div>
+        )}
 
         {/* Right Actions */}
         <div className="mb-0.5 mr-0.5 flex items-center gap-1">
-          <div className="hidden sm:block">
-            <Tooltip content="Coming soon">
-              <button 
-                type="button" 
-                disabled 
-                className="p-2 text-gray-400 opacity-50 cursor-not-allowed rounded-full mr-1" 
-                aria-label="Voice input coming soon"
-              >
-                <Mic size={18} />
-              </button>
-            </Tooltip>
+          <div className="hidden sm:flex items-center gap-1 relative">
+            <button 
+              type="button" 
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full mr-1 transition-colors"
+            >
+              <Settings2 size={16} />
+            </button>
+            {showSettings && (
+              <div className="absolute bottom-full mb-2 right-0 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 z-[100]">
+                <VoiceSettings 
+                  settings={speechSettings}
+                  setSettings={setSpeechSettings}
+                  voices={voices}
+                />
+              </div>
+            )}
+            <VoiceButton state={voiceState} onClick={onVoiceToggle} />
           </div>
           <button
             type="submit"
