@@ -20,7 +20,7 @@ export const KnowledgeBaseModule = () => {
 
   useEffect(() => {
     if (selectedDoc && activeTab === "chunks") {
-       const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+       const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
        fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc.id}/chunks`)
          .then(res => res.json())
          .then(setDocumentChunks)
@@ -32,7 +32,7 @@ export const KnowledgeBaseModule = () => {
     if (!retrievalQuery) return;
     setRetrievalLoading(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
       const res = await fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc?.id}/retrieve?q=${encodeURIComponent(retrievalQuery)}`);
       if (!res.ok) {
         const errText = await res.text().catch(() => "Unknown error");
@@ -68,7 +68,7 @@ export const KnowledgeBaseModule = () => {
     if (!selectedDoc) return;
     setIsReprocessing(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
       await fetch(`${backendUrl}/api/knowledge/documents/${selectedDoc.id}/reprocess`, { method: "POST" });
       
       const res = await fetch(`${backendUrl}/api/knowledge/documents`);
@@ -88,7 +88,7 @@ export const KnowledgeBaseModule = () => {
   const handleSelectDoc = async (doc: any) => {
     setSelectedDoc(doc);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
       const res = await fetch(`${backendUrl}/api/knowledge/documents/${doc.id}`);
       if (res.ok) {
         const fullDoc = await res.json();
@@ -102,7 +102,7 @@ export const KnowledgeBaseModule = () => {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
+      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
       const res = await fetch(`${backendUrl}/api/knowledge/documents`);
       if(res.ok) {
         const data = await res.json();
@@ -124,7 +124,7 @@ export const KnowledgeBaseModule = () => {
     
     const interval = setInterval(async () => {
       try {
-        const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
+        const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
         const res = await fetch(`${backendUrl}/api/knowledge/documents`);
         if(res.ok) {
           const data = await res.json();
@@ -159,7 +159,7 @@ export const KnowledgeBaseModule = () => {
     
     try {
       setUploadProgress(40);
-      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
+      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
       const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
         method: "POST",
         body: formData,
@@ -184,7 +184,7 @@ export const KnowledgeBaseModule = () => {
   const handleDelete = async (id: string) => {
     if(!confirm("Are you sure you want to delete this document and all its chunks?")) return;
     try {
-      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
+      const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
       await fetch(`${backendUrl}/api/knowledge/documents/${id}`, { method: "DELETE" });
       fetchDocuments();
     } catch (e) {
@@ -492,7 +492,7 @@ export const KnowledgeBaseModule = () => {
                          <button 
                            onClick={async () => {
                              try {
-                               const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+                               const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
                                const fetchId = res.payload.chunk_id || res.id;
                                const response = await fetch(`${backendUrl}/api/knowledge/chunks/${fetchId}/embedding`);
                                if (response.ok) {

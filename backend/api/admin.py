@@ -4,13 +4,14 @@ Responsibilities: Dashboard and configuration.
 Flow: Admin entrypoint.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any, TypeVar, Generic
+from typing import List, Dict, Any
 import re
 
-from core.database import greeting_repo, farewell_repo, faq_repo, fastpath_repo, knowledge_node_repo, log_audit
-from core.schemas import Greeting, Farewell, FAQ, FastPath, KnowledgeNode
+from core.database import greeting_repo, faq_repo, log_audit
+from core.schemas import Greeting, FAQ
+from chatbot.in_memory_engine import engine
 
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Studio"])
@@ -30,6 +31,7 @@ def create_crud_routes(router: APIRouter, repo, model: type[BaseModel], path_nam
                 item = pre_save_hook(item)
             created = repo.create(model(**item))
             log_audit("CREATE", path_name, created.id, new_value=created.model_dump())
+            engine.load_all()
             return created.model_dump()
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -47,6 +49,7 @@ def create_crud_routes(router: APIRouter, repo, model: type[BaseModel], path_nam
             updated = repo.update(item_id, model(**item))
             if updated:
                 log_audit("UPDATE", path_name, item_id, old_value=old_val, new_value=updated.model_dump())
+                engine.load_all()
                 return updated.model_dump()
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -61,6 +64,7 @@ def create_crud_routes(router: APIRouter, repo, model: type[BaseModel], path_nam
         old_val = old_item.model_dump()
         if repo.delete(item_id):
             log_audit("DELETE", path_name, item_id, old_value=old_val)
+            engine.load_all()
             return {"status": "deleted"}
         raise HTTPException(status_code=400, detail="Delete failed")
         
@@ -71,48 +75,52 @@ def create_crud_routes(router: APIRouter, repo, model: type[BaseModel], path_nam
             created = repo.create(model(**item))
             created_items.append(created.model_dump())
         log_audit("IMPORT", path_name, "bulk", new_value={"count": len(created_items)})
+        engine.load_all()
         return {"imported": len(created_items)}
 
-# Create routes for all modules
 
+# Greeting regex auto-generation hook
 def generate_greeting_regex(item: dict):
+    import itertools
     alias_list = item.get("alias", [])
     regex_val = item.get("regex", "")
-    
-    # Generate regex only if it is empty and alias list has items
     if alias_list and not regex_val:
-        import itertools
         patterns = []
         for alias in alias_list:
             alias = alias.strip()
             if not alias: continue
-            
             compressed = ''.join(c for c, _ in itertools.groupby(alias))
             char_patterns = []
             for c in compressed:
                 if c.isspace():
                     char_patterns.append(r"\s+")
-                elif c.isalnum():
-                    char_patterns.append(re.escape(c) + "+")
                 else:
                     char_patterns.append(re.escape(c) + "+")
             patterns.append("".join(char_patterns))
-            
         if patterns:
             item["regex"] = rf"(?i)\b({'|'.join(patterns)})\b"
-            
     return item
 
 create_crud_routes(router, greeting_repo, Greeting, "greetings", pre_save_hook=generate_greeting_regex)
-create_crud_routes(router, farewell_repo, Farewell, "farewells", pre_save_hook=generate_greeting_regex)
 create_crud_routes(router, faq_repo, FAQ, "faqs")
-create_crud_routes(router, fastpath_repo, FastPath, "fastpaths")
 
-create_crud_routes(router, knowledge_node_repo, KnowledgeNode, "knowledge_nodes")
+
+# Special endpoint: get all FAQs as parent options (title + id only)
+@router.get("/faqs/parent-options")
+def get_faq_parent_options():
+    """Returns title+id pairs for all top-level FAQs (parent_id is None), used for parent dropdowns."""
+    items = faq_repo.get_all(limit=2000)
+    options = [
+        {"id": item.id, "title": getattr(item, "title", "")}
+        for item in items
+        if getattr(item, "parent_id", None) is None and getattr(item, "status", "active") == "active"
+    ]
+    return {"data": options}
 
 
 @router.get("/dashboard/overview")
 def dashboard_overview():
+    faq_count = faq_repo.count()
     return {
         "pipeline": {
             "status": "Online",
@@ -132,13 +140,13 @@ def dashboard_overview():
         "kpis": {
             "todays_requests": 150,
             "greeting_requests": 45,
-            "fastpath_requests": 20,
             "knowledge_requests": 35,
             "rag_responses": 30,
             "cache_hits": 60,
             "memory_hits": 10,
             "retriever_hits": 25,
             "gemini_calls": 50,
-            "fallback_responses": 2
+            "fallback_responses": 2,
+            "faq_count": faq_count
         }
     }

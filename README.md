@@ -80,3 +80,29 @@ An enterprise-grade, production-ready Retrieval-Augmented Generation (RAG) chatb
 
 - Open your browser and navigate to `http://localhost:3000` to interact with the Chatbot.
 - Access the Admin Dashboard at `http://localhost:3000/admin` to upload documents, tune chunking settings, and manage knowledge bases.
+
+## Running on Local Network
+
+To access the Chatbot from another device on the same Wi-Fi:
+
+### 1. Find Local IP
+Run the following command in your terminal to find your Local IPv4 Address:
+```bash
+ipconfig
+```
+*(The backend will also automatically detect and print this on startup!)*
+
+### 2. Start Services
+Make sure your `.env` files are correctly configured with your Local IP (e.g., `192.168.1.xxx`).
+- **Start Backend:** `python app.py`
+- **Start Frontend:** `npm run dev`
+
+### 3. Open Browser
+On your phone or another PC, navigate to:
+`http://192.168.1.xxx:3000`
+
+### Troubleshooting
+- **Firewall:** Windows Defender Firewall might block incoming connections to ports 3000, 8001, and 8002. Allow TCP traffic for these ports.
+- **Antivirus:** Ensure third-party antivirus software isn't blocking LAN traffic.
+- **Same Wi-Fi:** Make sure both devices are on the exact same Wi-Fi network and that the network profile is set to Private (not Public).
+- **VPN:** Ensure your VPN is disabled, as it might isolate your device from the local network.

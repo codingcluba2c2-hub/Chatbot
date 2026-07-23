@@ -34,23 +34,6 @@ class GreetingDB(Base):
     response = Column(String, default="")
     enabled = Column(Boolean, default=True)
 
-class FarewellDB(Base):
-    __tablename__ = "farewells"
-    
-    id = Column(String, primary_key=True, index=True)
-    created_at = Column(Float)
-    updated_at = Column(Float)
-    created_by = Column(String, default="system")
-    updated_by = Column(String, default="system")
-    status = Column(String, default="active")
-    
-    name = Column(String)
-    intent = Column(String, default="Farewell")
-    priority = Column(Integer, default=1)
-    alias = Column(JSON, default=list)
-    regex = Column(String, nullable=True)
-    response = Column(String, default="")
-    enabled = Column(Boolean, default=True)
 
 class FAQDB(Base):
     __tablename__ = "faqs"
@@ -62,32 +45,17 @@ class FAQDB(Base):
     updated_by = Column(String, default="system")
     status = Column(String, default="active")
     
-    question = Column(String)
-    aliases = Column(JSON, default=list)
+    title = Column(String)
     answer = Column(String)
-    category = Column(String, default="general")
-    keywords = Column(JSON, default=list)
-    priority = Column(Integer, default=1)
-    language = Column(String, default="en")
-    enabled = Column(Boolean, default=True)
-
-class FastPathDB(Base):
-    __tablename__ = "fastpaths"
-    
-    id = Column(String, primary_key=True, index=True)
-    created_at = Column(Float)
-    updated_at = Column(Float)
-    created_by = Column(String, default="system")
-    updated_by = Column(String, default="system")
-    status = Column(String, default="active")
-    
-    trigger = Column(String)
     aliases = Column(JSON, default=list)
-    intent = Column(String, default="FastPath")
-    response = Column(String)
-    quick_actions = Column(JSON, default=list)
-    priority = Column(Integer, default=1)
-    enabled = Column(Boolean, default=True)
+    regex_pattern = Column(String, nullable=True)
+    
+    parent_id = Column(String, nullable=True)
+    display_type = Column(String, default="Standard")
+    show_children_buttons = Column(Boolean, default=False)
+    icon = Column(String, nullable=True)
+
+
 
 class AuditLogDB(Base):
     __tablename__ = "audit_logs"
@@ -169,26 +137,6 @@ class KnowledgeSettingsDB(Base):
     top_k = Column(Integer, default=5)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-class KnowledgeNodeDB(Base):
-    __tablename__ = "knowledge_nodes"
-    
-    id = Column(String, primary_key=True, index=True)
-    parent_id = Column(String, ForeignKey("knowledge_nodes.id", ondelete="SET NULL"), nullable=True, index=True)
-    title = Column(String, nullable=False)
-    slug = Column(String, nullable=True)
-    description = Column(String, nullable=True)
-    response_markdown = Column(String, nullable=True)
-    node_type = Column(String, default="standard")
-    icon = Column(String, nullable=True)
-    image = Column(String, nullable=True)
-    priority = Column(Integer, default=1)
-    sort_order = Column(Integer, default=1)
-    status = Column(String, default="active")
-    aliases = Column(JSON().with_variant(JSONB, "postgresql"), default=list)
-    created_at = Column(DateTime(timezone=True), default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    created_by = Column(String, default="system")
-    updated_by = Column(String, default="system")
 
 
 

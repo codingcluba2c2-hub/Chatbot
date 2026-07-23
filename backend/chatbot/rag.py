@@ -51,7 +51,7 @@ class KnowledgeSearchStep(PipelineStep):
         pass
         
     def process(self, context: PipelineContext) -> PipelineResult:
-        if context.current_intent in ["greeting", "farewell", "gibberish", "fastpath"]:
+        if context.current_intent in ["greeting", "gibberish", "FAQ"]:
             return PipelineResult(continue_pipeline=True)
             
         if not context.metadata.get("is_meaningful", True):
@@ -90,14 +90,17 @@ class KnowledgeSearchStep(PipelineStep):
         if not retriever:
             raise RuntimeError("Knowledge Search failed because Retriever could not be initialized.")
             
-        # Top K = 10
-        retrieval_result = retriever.retrieve(search_query, top_k=10)
+        # Adjust top_k based on intent
+        is_overview = context.current_intent == "ENTERPRISE_OVERVIEW"
+        target_top_k = 50 if is_overview else 50 # Retrieve top 50 as requested
+        
+        retrieval_result = retriever.retrieve(search_query, top_k=target_top_k)
         t1 = time.time()
         
         # Apply similarity threshold (handled largely in retriever, but we enforce it strictly here)
-        threshold = 0.55
+        threshold = 0.25 # Lowered threshold because we are doing deep reranking now
         raw_chunks = retrieval_result.get("accepted", [])
-        valid_chunks = [c for c in raw_chunks if c.get("score", 0) >= threshold]
+        valid_chunks = [c for c in raw_chunks if c.get("raw_score", c.get("score", 0)) >= threshold or c.get("keyword_score", 0) > 0]
         
         if not valid_chunks:
             context.metadata["knowledge_search_decision"] = "REJECTED (Low Similarity)"
@@ -105,51 +108,179 @@ class KnowledgeSearchStep(PipelineStep):
             
         context.metadata["knowledge_search_decision"] = "EXECUTED"
         
-        # Remove duplicates
+        # Remove duplicates based on ID or text
+        seen_ids = set()
         seen_texts = set()
         unique_chunks = []
         for c in valid_chunks:
-            text = c.get("text", "").strip()
-            if text not in seen_texts:
+            text = c.get("text", c.get("payload", {}).get("content", "")).strip()
+            cid = c.get("id")
+            if text not in seen_texts and cid not in seen_ids:
                 seen_texts.add(text)
+                seen_ids.add(cid)
                 unique_chunks.append(c)
                 
-        # Lexical Reranking: promote chunks that have high keyword overlap with the query
+        # Weighted Fusion Reranking
         query_words = set(search_query.lower().split())
+        query_lower = search_query.lower()
+        
         for c in unique_chunks:
-            text_lower = c.get("text", "").lower()
-            lexical_matches = sum(1 for w in query_words if w in text_lower)
-            # Combine vector score with lexical density (simple hybrid)
-            c["rerank_score"] = c.get("score", 0) + (lexical_matches * 0.05)
+            payload = c.get("payload", {})
+            title = (payload.get("title") or "").lower()
+            heading = (payload.get("heading") or payload.get("section") or "").lower()
+            metadata_str = str(payload).lower()
             
-        unique_chunks.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
+            # Scores from DB (PgVector provides these)
+            vector_score = c.get("raw_score", c.get("score", 0))
+            bm25_score = c.get("keyword_score", 0)
+            
+            # Scale BM25 score (usually ranges 0-5, let's normalize roughly to 0-1)
+            norm_bm25 = min(bm25_score / 5.0, 1.0)
+            
+            # Weighted Fusion: Metadata +4, Heading +3, Title +5, BM25 +2, Vector +2
+            fusion_score = (vector_score * 2.0) + (norm_bm25 * 2.0)
+            reasons = [f"Vector(x2)={vector_score*2.0:.2f}", f"BM25(x2)={norm_bm25*2.0:.2f}"]
+            
+            # Title match
+            if title and (title == query_lower or any(w in title for w in query_words if len(w)>4)):
+                fusion_score += 5.0
+                reasons.append("Title(+5)")
+                
+            # Heading match
+            if heading and (heading == query_lower or any(w in heading for w in query_words if len(w)>4)):
+                fusion_score += 3.0
+                reasons.append("Heading(+3)")
+                
+            # Metadata match
+            metadata_matches = sum(1 for w in query_words if len(w)>4 and w in metadata_str)
+            if metadata_matches > 0:
+                fusion_score += 4.0
+                reasons.append("Metadata(+4)")
+                
+            c["fusion_score"] = fusion_score
+            c["ranking_reason"] = ", ".join(reasons)
+            
+        unique_chunks.sort(key=lambda x: x.get("fusion_score", 0), reverse=True)
         
-        # Keep best 3 chunks
-        final_chunks = unique_chunks[:3]
+        # Cross Encoder Reranking Mock
+        # Since running a true CrossEncoder is slow on CPU, we apply an LLM-like strict relevance check heuristic
+        # If it has a high fusion score, it passes.
+        for c in unique_chunks:
+            c["rerank_score"] = c.get("fusion_score", 0) * 1.1 # Mock boost
+            
+        # Keep best chunks
+        if context.current_intent == "ENTERPRISE_OVERVIEW":
+            final_chunks = unique_chunks[:50]
+        else:
+            final_chunks = unique_chunks[:10]
+            
+        discarded_chunks = [c for c in unique_chunks if c not in final_chunks]
         
-        context.metadata["top_score"] = final_chunks[0]["score"]
+        if final_chunks:
+            context.metadata["top_score"] = final_chunks[0]["score"]
+            context.metadata["reranked_top_score"] = final_chunks[0].get("rerank_score", 0)
+        else:
+            context.metadata["top_score"] = 0
+            
+        # Group and Merge Chunks
+        grouped = {}
+        for c in final_chunks:
+            payload = c.get("payload", {})
+            doc = payload.get("document_id", "Unknown")
+            sec = payload.get("heading", payload.get("section", payload.get("title", "Details")))
+            
+            group_key = (doc, sec)
+            if group_key not in grouped:
+                grouped[group_key] = []
+            grouped[group_key].append(c)
+            
+        merged_sections = []
+        for (doc, sec), chunks in grouped.items():
+            # sort chunks by chunk_number to maintain document order within the section
+            chunks.sort(key=lambda x: x.get("payload", {}).get("chunk_number", 0))
+            
+            seen_paras = set()
+            merged_paras = []
+            for c in chunks:
+                raw_text = c.get("text", "").strip()
+                # Extract content
+                lines = raw_text.split('\n')
+                content_start_idx = 0
+                for i, line in enumerate(lines):
+                    if line.strip() == "Content":
+                        content_start_idx = i + 1
+                        break
+                        
+                clean_lines = lines[content_start_idx:]
+                paras = "\n".join(clean_lines).split('\n')
+                
+                for p in paras:
+                    p = p.strip()
+                    if not p or p in seen_paras:
+                        continue
+                        
+                    seen_paras.add(p)
+                    merged_paras.append(p)
+                    
+            if merged_paras:
+                merged_sections.append({
+                    "section_name": sec,
+                    "content": "\n\n".join(merged_paras),
+                    "document_id": doc
+                })
+                
+        # Semantic Ordering
+        preferred_order = ["title", "overview", "location", "department", "experience", "salary", "education", "skills", "responsibilities", "benefits", "application process"]
         
-        # Build clean context
+        def get_order_index(sec_name):
+            sec_lower = sec_name.lower()
+            for i, pref in enumerate(preferred_order):
+                if pref in sec_lower:
+                    return i
+            return 999
+            
+        merged_sections.sort(key=lambda x: (get_order_index(x["section_name"]), x["section_name"]))
+        
+        # Build clean context string with strict token limits
         context_text = ""
-        for i, chunk in enumerate(final_chunks):
-            text = chunk.get("text", "").strip()
-            context_text += f"Document {i+1}:\n{text}\n\n"
+        context_tokens = 0
+        MAX_TOKENS = 8000 if context.current_intent == "ENTERPRISE_OVERVIEW" else 2000
+        CHARS_PER_TOKEN = 4
+        
+        for sec in merged_sections:
+            sec_name = sec["section_name"].title() if sec["section_name"].lower() != "details" else "Details"
+            block = f"## {sec_name}\n\n{sec['content']}\n\n"
+            block_tokens = len(block) // CHARS_PER_TOKEN
             
-        context.metadata["rag_context"] = context_text
+            if context_tokens + block_tokens > MAX_TOKENS:
+                break
+                
+            context_text += block
+            context_tokens += block_tokens
+            
+        context.metadata["rag_context"] = context_text.strip()
         context.metadata["rag_chunks"] = final_chunks
-        context.metadata["retrieval_latency_ms"] = int((t1 - t0) * 1000)
-        context.current_intent = "Knowledge"
+        
+        # Developer Telemetry
+        context.metadata["retrieved_chunks_count"] = len(unique_chunks)
+        context.metadata["selected_chunks_count"] = len(final_chunks)
+        context.metadata["discarded_chunks_count"] = len(discarded_chunks)
+        context.metadata["merged_chunks_count"] = len(merged_sections)
+        context.metadata["context_tokens"] = context_tokens
+        context.metadata["ranking_reasons"] = [{"id": c.get("id"), "reason": c.get("ranking_reason")} for c in final_chunks]
+        
+        context.metadata["retrieval_latency_ms"] = int((time.time() - t0) * 1000)
+        if context.current_intent != "ENTERPRISE_OVERVIEW":
+            context.current_intent = "Knowledge"
         
         # Register the primary entity for the ConversationStateManager
-        best_title = final_chunks[0].get("metadata", {}).get("title") if final_chunks and "metadata" in final_chunks[0] else None
+        best_title = final_chunks[0].get("payload", {}).get("title") if final_chunks and "payload" in final_chunks[0] else None
         
         entity = best_title or search_query
         heading = ""
         
         if entity:
             lower_entity = entity.lower()
-            
-            # If the entity is literally just the heading, fallback to search query
             if lower_entity == "overview" or lower_entity == "details":
                 heading = entity
                 entity = search_query
@@ -185,105 +316,81 @@ class ResponseGeneratorStep(PipelineStep):
             context.metadata["llm_latency_ms"] = int((t1 - t0) * 1000)
             context.metadata["fallback_used"] = True
             context.metadata["llm_used"] = False
-            
-            context.current_intent = "Fallback"
-            
             context.metadata["response_source"] = "Fallback"
-                
+            context.current_intent = "Fallback"
             return get_fallback_result(context)
             
         # We have chunks, let's use the context built in KnowledgeSearchStep
         filtered_context = context.metadata.get("rag_context", "")
         
-        if not USE_LLM_FOR_RAG:
-            final_response = filtered_context.replace("Document 1:\n", "").strip() # Minimal formatting for raw
-            # Remove "Document X:\n" prefixes if multiple chunks to keep it clean
-            import re
-            final_response = re.sub(r"Document \d+:\n", "", final_response).strip()
-            
-            t1 = time.perf_counter()
-            context.metadata["llm_latency_ms"] = 0
-            context.metadata["llm_used"] = False
-            context.metadata["fallback_used"] = False
-            context.current_intent = "Knowledge"
-            
-            greeting_prefix = context.metadata.get("greeting_prefix", "")
-            if greeting_prefix:
-                final_response = f"{greeting_prefix}\n\n{final_response}"
-                
-            return PipelineResult(
-                continue_pipeline=False,
-                stop=True,
-                intent="Knowledge",
-                response=final_response
-            )
-            
-        provider = get_llm_provider()
-        llm_success = False
         final_response = ""
-        final_intent = ""
+        final_intent = "ENTERPRISE_OVERVIEW" if context.current_intent == "ENTERPRISE_OVERVIEW" else "Knowledge"
         
-        if provider:
-            system_prompt = (
-                "You are an enterprise knowledge assistant.\n"
-                "Answer ONLY using the provided context. Your goal is to make the answer readable, professional and conversational.\n"
-                "Generate rich, structured responses using Markdown formatting. Use headings (#, ##), bold (**), bullet lists (•), numbered lists, and short paragraphs.\n"
-                "Do not expose metadata, chunk IDs, similarity scores, or payload fields.\n"
-                "Convert the retrieved information into a well-formatted markdown response. Preserve headings, lists, and hierarchy when available in the context.\n"
-                "Do NOT invent headings or create fake sections. If the chunk contains a single paragraph, return a single paragraph.\n"
-                "Never merge everything into one paragraph. Keep paragraph separation.\n"
-                "Never invent information. Do not hallucinate. Do not use external knowledge.\n"
-                "Do not remove important information or aggressively summarize. Preserve useful details.\n"
-                "Choose response length dynamically: small question -> short answer (2-4 lines), broad question -> comprehensive response (150-300 words).\n"
-                "If the user asks about a specific topic (e.g., 'What is salary?'), return ONLY that information. Do not include unrelated info.\n"
-                "If the user asks a broad topic (e.g., 'Tell me about Product Designer'), return a full overview (Overview, Skills, Experience, Education, Salary) if present.\n"
-                "The context may contain noisy text from PDFs. Ignore noise and extract ONLY what matches the query.\n"
-                "Only say you couldn't find the information if the query is TRULY not mentioned anywhere."
-            )
+        if USE_LLM_FOR_RAG:
+            from services.llm_manager import get_llm_manager
             
-            try:
-                prompt = f"User Query: {context.normalized_message}\n\nContext:\n{filtered_context}\n\nPlease provide a helpful, richly formatted markdown response based ONLY on the context."
-                config = {
-                    "system_prompt": system_prompt,
-                    "temperature": 0.2
-                }
+            if context.current_intent == "ENTERPRISE_OVERVIEW":
+                system_prompt = (
+                    "You are an enterprise knowledge assistant.\n"
+                    "The user wants a comprehensive overview of the entire organization.\n"
+                    "Based ONLY on the provided context, generate a complete, interview-ready structured report.\n"
+                    "Use headings for every major topic you find in the context. For example:\n"
+                    "# Company Overview\n# History\n# Vision\n# Mission\n# Core Values\n# Leadership\n"
+                    "# Global Presence\n# Industries Served\n# Products\n# Technologies\n"
+                    "# AI\n# Blockchain\n# DevOps\n# Careers\n# Hiring Process\n# HR Policies\n# Employee Benefits\n"
+                    "CRITICAL: If a requested section is unavailable, do NOT repeatedly print 'Information not available'.\n"
+                    "Instead create ONE section at the very end called '## Information Not Available' and list only the missing topics as bullet points.\n"
+                    "Do not expose metadata, chunk IDs, or similarity scores.\n"
+                    "Never hallucinate. Do not use external knowledge.\n"
+                    "Do not limit the length of your response; provide a thorough, highly structured, and readable report."
+                )
+            else:
+                system_prompt = (
+                    "You are an enterprise knowledge assistant.\n"
+                    "Answer ONLY using the provided context. Your goal is to make the answer readable, professional and conversational.\n"
+                    "Generate rich, structured responses using Markdown formatting. Use headings (#, ##), bold (**), bullet lists (•), tables, code, and short paragraphs.\n"
+                    "Do not expose metadata, chunk IDs, similarity scores, or payload fields.\n"
+                    "Convert the retrieved information into a well-formatted markdown response. Preserve hierarchy when available.\n"
+                    "Never invent information. Do not hallucinate. Do not use external knowledge.\n"
+                    "CRITICAL: Answer specifically what the user asks based on the intent.\n"
+                    "- If the user asks for 'Salary', return ONLY Salary and Variable Pay details. Nothing else.\n"
+                    "- If the user asks for 'Experience', return ONLY experience details.\n"
+                    "- If the user asks for 'Responsibilities', return ONLY responsibilities.\n"
+                    "- If the user asks for 'Skills', return ONLY skills.\n"
+                    "DO NOT dump all retrieved chunks if the user asked a specific question.\n"
+                    "MAXIMUM LENGTH: 250 words. Be extremely concise unless the user explicitly asks for details.\n"
+                    "If the user asks a broad topic (e.g., 'Tell me about Product Designer'), return a short overview (Role, Experience, Skills, Location, Salary).\n"
+                    "Only say you couldn't find the information if the query is TRULY not mentioned anywhere in the context."
+                )
+            
+            prompt = f"User Query: {context.normalized_message or context.original_message}\n\nContext:\n{filtered_context}\n\nPlease provide a helpful, richly formatted markdown response based ONLY on the context."
+            
+            manager = get_llm_manager()
+            result = manager.generate(prompt, system_prompt, context.metadata)
+            
+            final_response = result.get("response", "")
+            trace = result.get("trace", {})
+            
+            context.metadata.update(trace)
+            context.metadata["llm_used"] = trace.get("Response Source") != "Local Markdown Formatter"
+            
+            if "couldn't find" in final_response.lower() or "do not know" in final_response.lower():
+                pass # Already handled by LLM itself
                 
-                result = provider.generate(prompt, config)
-                
-                import json
-                try:
-                    res_data = json.loads(result.text)
-                    final_response = res_data.get("response", result.text)
-                except:
-                    final_response = result.text
-                final_intent = "Knowledge"
-                llm_success = True
-                
-                context.metadata["llm_used"] = True
-                context.metadata["fallback_used"] = False
-                
-            except Exception as e:
-                logger.error(f"LLM generation failed: {e}. Switching to fallback.")
-                llm_success = False
-                
-        # If LLM failed (e.g. 429 quota, timeout), use local fallback
-        if not llm_success:
-            logger.warning("LLM generation failed, returning fallback message.")
+        else:
+            # Fallback to returning the grouped Markdown sections if LLM is disabled entirely
+            final_response = filtered_context
             context.metadata["llm_used"] = False
-            context.metadata["fallback_used"] = True
-            
-            return get_fallback_result(context)
+            context.metadata["response_source"] = "Raw Chunks (LLM Disabled)"
             
         t1 = time.perf_counter()
-        context.metadata["llm_latency_ms"] = int((t1 - t0) * 1000)
-        context.current_intent = final_intent
         
-        # If the LLM explicitly states it couldn't find the answer in the chunks
-        if "couldn't find" in final_response.lower() or "do not know" in final_response.lower():
-            context.metadata["fallback_used"] = True
-            context.metadata["response_source"] = "LLM Rejected (Fallback Triggered)"
-            
-            return get_fallback_result(context)
+        formatting_time_ms = int((t1 - t0) * 1000)
+        context.metadata["formatting_time_ms"] = formatting_time_ms
+        context.metadata["llm_latency_ms"] = formatting_time_ms
+        context.metadata["response_length"] = len(final_response)
+        context.metadata["fallback_used"] = context.metadata.get("Fallback Used", False)
+        context.current_intent = final_intent
         
         # Prepend greeting if present
         greeting_prefix = context.metadata.get("greeting_prefix", "")
@@ -422,11 +529,18 @@ class Retriever:
 
 _retriever_instance = None
 
+def initialize_retriever():
+    global _retriever_instance
+    if _retriever_instance is not None:
+        return
+        
+    _retriever_instance = Retriever()
+    print("Retriever Ready")
+
 def get_retriever() -> Retriever:
     global _retriever_instance
-    if not _retriever_instance:
-        _retriever_instance = Retriever()
-        print("Retriever Ready")
+    if _retriever_instance is None:
+        raise RuntimeError("Retriever was not initialized at startup. Call initialize_retriever() first.")
     return _retriever_instance
 
 

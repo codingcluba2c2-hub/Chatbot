@@ -17,7 +17,10 @@ class GreetingEngine:
     GREETING_DICTIONARY = [
         "hi", "hello", "hey", "heya", "yo", "greetings", 
         "good morning", "morning", "good afternoon", "afternoon", 
-        "good evening", "evening", "good night", "night", "gm", "gn"
+        "good evening", "evening", "good night", "night", "gm", "gn",
+        "bye", "goodbye", "see you", "take care", "thanks", "thank you",
+        "welcome", "have a nice day", "have a good day", "nice to meet you",
+        "have a nice weekend", "see you tomorrow", "good luck", "welcome back"
     ]
     
     # 2. Response Templates (Cyclical 3-step responses)
@@ -200,7 +203,7 @@ class GreetingEngine:
             }
         }
 
-class GreetingFarewellStep(PipelineStep):
+class GreetingStep(PipelineStep):
     def __init__(self):
         super().__init__()
         self.greeting_engine = GreetingEngine()
@@ -232,27 +235,5 @@ class GreetingFarewellStep(PipelineStep):
             else:
                 context.metadata["routing"] = "Greeting -> CONTINUE"
                 context.normalized_message = remaining
-        # Check Farewell
-        from chatbot.detector import detect_farewell
-        is_farewell, matched_pattern, confidence, response, remaining_query = detect_farewell(context.normalized_message)
-        
-        if is_farewell:
-            context.metadata["farewell_detected"] = True
-            context.metadata["farewell_token"] = matched_pattern
-            context.metadata["farewell_prefix"] = response
-            
-            if not remaining_query.strip():
-                context.metadata["routing"] = "Farewell -> STOP"
-                context.current_intent = "Farewell"
-                return PipelineResult(
-                    continue_pipeline=False, 
-                    stop=True, 
-                    intent="Farewell", 
-                    response=response
-                )
-            else:
-                context.metadata["routing"] = "Farewell -> CONTINUE"
-                context.metadata["remaining_query"] = remaining_query
-                context.normalized_message = remaining_query
         
         return PipelineResult(continue_pipeline=True)

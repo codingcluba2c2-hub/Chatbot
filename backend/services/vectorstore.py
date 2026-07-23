@@ -334,25 +334,41 @@ class QdrantProvider(VectorStoreProvider):
 
 _vector_store_instance = None
 
-def get_vector_store(collection_name: str = None) -> VectorStoreProvider:
+def initialize_vector_store(collection_name: str = None):
+    global _vector_store_instance
+    if _vector_store_instance is not None:
+        return
+        
+    from core.config import VECTOR_PROVIDER, QDRANT_URL, QDRANT_API_KEY, VECTOR_COLLECTION, DEVELOPER_MODE
+    c_name = collection_name or VECTOR_COLLECTION
+    
+    if VECTOR_PROVIDER == "pgvector":
+        print("Connecting pgvector...")
+        _vector_store_instance = PgVectorProvider(c_name)
+    elif VECTOR_PROVIDER == "qdrant":
+        print("Connecting qdrant...")
+        url = QDRANT_URL
+        api_key = QDRANT_API_KEY
+        
+        # Support Local Docker Qdrant automatically in Dev mode
+        if DEVELOPER_MODE and (not url or "cloud.qdrant.io" not in url):
+            url = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")
+            api_key = None
+            print(f"Developer Mode: Using Local Qdrant at {url}")
+            
+        _vector_store_instance = QdrantProvider(
+            collection_name=c_name,
+            url=url,
+            api_key=api_key
+        )
+    else:
+        print(f"Warning: {VECTOR_PROVIDER} is not supported. Using pgvector.")
+        _vector_store_instance = PgVectorProvider(c_name)
+
+def get_vector_store() -> VectorStoreProvider:
     global _vector_store_instance
     if _vector_store_instance is None:
-        if VECTOR_PROVIDER == "pgvector":
-            print("Connecting pgvector...")
-            _vector_store_instance = PgVectorProvider(collection_name)
-        elif VECTOR_PROVIDER == "qdrant":
-            print("Connecting qdrant...")
-            from core.config import QDRANT_URL, QDRANT_API_KEY, VECTOR_COLLECTION
-            _vector_store_instance = QdrantProvider(
-                collection_name=collection_name or VECTOR_COLLECTION,
-                url=QDRANT_URL,
-                api_key=QDRANT_API_KEY
-            )
-        else:
-            # Fallback to pgvector anyway as it's the only supported one now
-            print(f"Warning: {VECTOR_PROVIDER} is not supported. Using pgvector.")
-            _vector_store_instance = PgVectorProvider(collection_name)
-            
+        raise RuntimeError("Vector store was not initialized at startup. Call initialize_vector_store() first.")
     return _vector_store_instance
 
 

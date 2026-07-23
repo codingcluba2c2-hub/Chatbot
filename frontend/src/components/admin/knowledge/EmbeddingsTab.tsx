@@ -21,7 +21,7 @@ export const EmbeddingsTab: React.FC<EmbeddingsTabProps> = ({ documentId }) => {
   useEffect(() => {
     const fetchEmbeddings = async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
         const res = await fetch(`${backendUrl}/api/knowledge/documents/${documentId}/embeddings`);
         if (!res.ok) {
           throw new Error('Failed to fetch embeddings');
@@ -41,7 +41,7 @@ export const EmbeddingsTab: React.FC<EmbeddingsTabProps> = ({ documentId }) => {
     if (!playgroundQuery.trim()) return;
     setPlaygroundLoading(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
       const res = await fetch(`${backendUrl}/api/knowledge/documents/${documentId}/retrieve?q=${encodeURIComponent(playgroundQuery)}&top_k=3`);
       if (res.ok) {
         const json = await res.json();

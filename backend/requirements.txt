@@ -41,5 +41,10 @@ sentence-transformers
 qdrant-client
 
 # Agent Orchestration & Real-time Communication
-agno
 websockets
+
+# Performance & Caching Additions
+orjson
+httptools
+rapidfuzz
+cachetoolspsutil

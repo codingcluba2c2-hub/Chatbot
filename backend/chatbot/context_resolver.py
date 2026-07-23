@@ -25,8 +25,8 @@ class ConversationContextResolverStep(PipelineStep):
         }
         
         # MODE 1: Complete Query or New Topic
-        # If it's not a followup, let the pipeline handle it normally (it might be a new topic like "Product Designer")
-        if not is_followup:
+        # If it's not a followup, or it's a complete sentence (>= 4 words), let the pipeline handle it normally
+        if not is_followup or len(words) >= 4:
             step_metadata["Complete Query?"] = "YES"
             formatted_metadata = "\n".join([f"{k}: {v}" for k, v in step_metadata.items()])
             context.metadata["ConversationContextResolver"] = formatted_metadata

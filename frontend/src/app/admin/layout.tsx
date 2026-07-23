@@ -25,9 +25,8 @@ import { DeveloperPreview } from "@/components/admin/DeveloperPreview";
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { name: "Conversations", href: "/admin/conversations", icon: MessageSquare },
-  { name: "Quick Replies", href: "/admin/quick-replies", icon: Zap },
   { name: "Knowledge Base", href: "/admin/knowledge", icon: Database },
-  { name: "Knowledge Tree", href: "/admin/knowledge-tree", icon: Network },
+  { name: "FAQs", href: "/admin/faqs", icon: Search },
   { name: "Knowledge Settings", href: "/admin/settings", icon: Wrench },
 ];
 

@@ -11,7 +11,8 @@ from chatbot.pipeline import PipelineResult
 from typing import Dict, Any, List
 from typing import Optional, Tuple
 import re
-from core.database import greeting_repo, farewell_repo, fastpath_repo, faq_repo
+from chatbot.in_memory_engine import engine
+from cachetools import TTLCache, cached
 # backend/utils/detectors.py
 
 def validate_query(text: str) -> dict:
@@ -20,9 +21,7 @@ def validate_query(text: str) -> dict:
     """
     # Bypass for known valid intents
     is_greet, _, _, _, _ = detect_greeting(text)
-    is_fw, _, _, _, _ = detect_farewell(text)
-    fp, _, _, _ = detect_fastpath(text)
-    if is_greet or is_fw or fp:
+    if is_greet:
         return {
             "isMeaningful": True, "confidence": 1.0, "reason": "Bypassed: Matches Known Intent",
             "metrics": {"meaningful_score": 100.0, "dictionary_match": 100.0}
@@ -117,27 +116,18 @@ def validate_query(text: str) -> dict:
         }
     }
 
+from functools import lru_cache
+
+def _get_greeting_structures():
+    return engine.greeting_phrases
+
 def detect_greeting(text: str) -> Tuple[bool, str, float, str, str]:
     """
     Detects if the message STARTS with a greeting based on GreetingRepository.
     Returns: (is_greeting, matched_pattern, confidence, response, remaining_query)
     """
-    greetings = greeting_repo.get_all(limit=1000)
     text_lower = text.lower().strip()
-    
-    # Sort by length descending to match longest phrases first
-    all_phrases = []
-    for g in greetings:
-        if not getattr(g, "enabled", True):
-            continue
-        name = getattr(g, "name", "")
-        if name:
-            all_phrases.append((name.lower(), name, getattr(g, "response", "")))
-        for alias in getattr(g, "alias", []):
-            if alias:
-                all_phrases.append((alias.lower(), alias, getattr(g, "response", "")))
-    
-    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
+    all_phrases = _get_greeting_structures()
     
     for phrase_lower, match_str, response in all_phrases:
         if phrase_lower and text_lower.startswith(phrase_lower):
@@ -150,163 +140,51 @@ def detect_greeting(text: str) -> Tuple[bool, str, float, str, str]:
             
     return False, "No greeting pattern matched", 0.0, "", text
 
-def detect_farewell(text: str) -> Tuple[bool, str, float, str, str]:
-    """
-    Detects if the message STARTS with a farewell based on FarewellRepository.
-    Returns: (is_farewell, matched_pattern, confidence, response, remaining_query)
-    """
-    farewells = farewell_repo.get_all(limit=1000)
-    text_lower = text.lower().strip()
-    
-    # Sort by length descending to match longest phrases first
-    all_phrases = []
-    for f in farewells:
-        if not getattr(f, "enabled", True):
-            continue
-        name = getattr(f, "name", "")
-        if name:
-            all_phrases.append((name.lower(), name, getattr(f, "response", "")))
-        for alias in getattr(f, "alias", []):
-            if alias:
-                all_phrases.append((alias.lower(), alias, getattr(f, "response", "")))
-    
-    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
-    
-    for phrase_lower, match_str, response in all_phrases:
-        if phrase_lower and text_lower.startswith(phrase_lower):
-            # Extract remaining text
-            remaining_query = text_lower[len(phrase_lower):].strip()
-            remaining_query = re.sub(r'^[^\w\s]+', '', remaining_query).strip()
-            
-            return True, match_str, 0.95, response, remaining_query
-            
-    return False, "No farewell pattern matched", 0.0, "", text
 
-def detect_fastpath(text: str) -> Tuple[Optional[str], str, float, str]:
-    """
-    Detects if the text matches any known FastPath.
-    Returns: (fastpath_trigger, matched_phrase, confidence, response)
-    """
-    fastpaths = fastpath_repo.get_all(limit=1000)
-    text_lower = text.lower()
-    
-    all_phrases = []
-    for fp in fastpaths:
-        if not fp.enabled:
-            continue
-        all_phrases.append((fp.trigger.lower(), fp.trigger, fp.response))
-        for alias in fp.aliases:
-            all_phrases.append((alias.lower(), fp.trigger, fp.response))
-            
-    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
-    
-    for phrase_lower, trigger, response in all_phrases:
-        if phrase_lower in text_lower:
-            # FastPath Protection: "overview" alone should not trigger "Company Details"
-            if phrase_lower == "overview" and "company" not in text_lower and "about" not in text_lower:
-                continue
-                
-            confidence = len(phrase_lower) / max(len(text_lower), 1)
-            confidence = min(1.0, confidence + 0.5) if len(phrase_lower) > 3 else 0.8
-            return trigger, phrase_lower, round(confidence, 2), response
-            
-    return None, "No fastpath matched", 0.0, ""
 
-def detect_faq(text: str) -> Tuple[bool, str, float, str]:
-    """
-    Detects if the message matches an FAQ using fuzzy string matching.
-    Returns: (is_faq, matched_question, confidence, answer)
-    """
+
+
+
+from cachetools import cached, TTLCache
+
+def _get_faq_structures():
+    all_phrases = []
+    for phrase, (orig, f) in engine.faq_exact_map.items():
+        all_phrases.append((phrase, orig, f))
+    
+    phrase_dict = {p[0]: (p[1], p[2]) for p in all_phrases}
+    phrase_keys = engine.faq_rapidfuzz_choices
+    
+    return all_phrases, phrase_dict, phrase_keys
+
+def detect_faq(text: str) -> Tuple[bool, str, float, Any]:
     from rapidfuzz import process, fuzz
-    faqs = faq_repo.get_all(limit=1000)
+    import re
     text_lower = text.lower().strip()
     
-    all_phrases = []
-    for f in faqs:
-        if not getattr(f, "enabled", True):
-            continue
-            
-        q = getattr(f, "question", "")
-        ans = getattr(f, "answer", "")
-        if q:
-            all_phrases.append((q.lower(), q, ans))
-            
-        for alias in getattr(f, "aliases", []):
-            if alias:
-                all_phrases.append((alias.lower(), alias, ans))
+    all_phrases, phrase_dict, phrase_keys = _get_faq_structures()
                 
     if not all_phrases:
-        return False, "No FAQ matched", 0.0, ""
+        return False, "No FAQ matched", 0.0, None
         
-    # We create a dictionary of phrase -> (original_phrase, answer)
-    phrase_dict = {p[0]: (p[1], p[2]) for p in all_phrases}
-    phrase_keys = list(phrase_dict.keys())
-    
-    # 1. Check exact/substring match first for speed
-    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
-    for phrase_lower, match_str, answer in all_phrases:
+    # 1. Exact/substring match
+    for phrase_lower, match_str, faq_obj in all_phrases:
+        # Regex or exact match logic
         if phrase_lower and (phrase_lower in text_lower or text_lower in phrase_lower):
-            return True, match_str, 1.0, answer
+            return True, match_str, 1.0, faq_obj
             
-    # 2. Use RapidFuzz for fuzzy matching (to handle Al vs ai typos)
-    # We use token_set_ratio or WRatio which is good for sentence similarity
+    # 2. RapidFuzz semantic similarity
     result = process.extractOne(text_lower, phrase_keys, scorer=fuzz.token_set_ratio)
     
     if result:
         match, score, index = result
-        if score >= 90: # 90% similarity threshold
-            original_phrase, answer = phrase_dict[match]
-            return True, original_phrase, score / 100.0, answer
+        if score >= 85: # Threshold lowered for semantic match
+            original_phrase, faq_obj = phrase_dict[match]
+            return True, original_phrase, score / 100.0, faq_obj
             
-    return False, "No FAQ matched", 0.0, ""
+    return False, "No FAQ matched", 0.0, None
 
-def detect_knowledge_tree(text: str) -> Tuple[bool, str, float, str, str]:
-    """
-    Detects if the message matches a Knowledge Tree node.
-    Returns: (is_matched, matched_node_title, confidence, response_markdown, node_id)
-    """
-    from core.database import knowledge_node_repo
-    from rapidfuzz import process, fuzz
-    
-    nodes = knowledge_node_repo.get_all(limit=1000)
-    text_lower = text.lower().strip()
-    
-    all_phrases = []
-    for n in nodes:
-        if getattr(n, "status", "active") != "active":
-            continue
-            
-        title = getattr(n, "title", "")
-        resp = getattr(n, "response_markdown", "") or getattr(n, "description", "")
-        if title:
-            all_phrases.append((title.lower(), title, resp, n.id))
-            
-        for alias in getattr(n, "aliases", []):
-            if alias:
-                all_phrases.append((alias.lower(), title, resp, n.id))
-                
-    if not all_phrases:
-        return False, "No Node matched", 0.0, "", ""
-        
-    phrase_dict = {p[0]: (p[1], p[2], p[3]) for p in all_phrases}
-    phrase_keys = list(phrase_dict.keys())
-    
-    # 1. Check exact match or if the alias is fully contained in the user's text
-    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
-    for phrase_lower, match_str, resp, node_id in all_phrases:
-        if phrase_lower and (phrase_lower == text_lower or phrase_lower in text_lower):
-            return True, match_str, 1.0, resp, node_id
-            
-    # 2. Use RapidFuzz for fuzzy matching
-    result = process.extractOne(text_lower, phrase_keys, scorer=fuzz.ratio)
-    
-    if result:
-        match, score, index = result
-        if score >= 85: # 85% similarity threshold for exact matches with typos
-            original_phrase, resp, node_id = phrase_dict[match]
-            return True, original_phrase, score / 100.0, resp, node_id
-            
-    return False, "No Node matched", 0.0, "", ""
+
 
 
 # backend/steps/followup_resolver_step.py
@@ -414,6 +292,9 @@ class SecurityValidationStep(PipelineStep):
                 )
                 
         return PipelineResult(stop=False)
+
+def warmup_caches():
+    engine.load_all()
 
 
 # backend/services/entity_extraction_service.py
@@ -611,6 +492,13 @@ class IntentNormalizationService:
         best_match = None
         best_score = 0.0
         
+        # 1. Exact Substring Match Check
+        for alias in self.all_aliases:
+            # If an alias (e.g. 'services') is a standalone word in the query (e.g. 'our services')
+            if alias == query or f" {alias} " in f" {query} ":
+                return alias, 1.0, self.alias_to_intent[alias]
+        
+        # 2. Fuzzy Match
         for alias in self.all_aliases:
             score = difflib.SequenceMatcher(None, query, alias).ratio()
             if score > best_score:
@@ -645,77 +533,7 @@ class IntentNormalizationService:
         }
 
 
-# backend/services/fastpath_service.py
-from core.database import fastpath_repo
 
-class FastPathService:
-    @staticmethod
-    def get_response(fastpath_key: str) -> str:
-        paths = fastpath_repo.get_all(limit=1000)
-        for path in paths:
-            if not path.enabled:
-                continue
-            if fastpath_key.lower() == path.trigger.lower() or fastpath_key.lower() in [a.lower() for a in path.aliases]:
-                return path.response
-                
-        return "FastPath triggered but response not found."
-
-def detect_knowledge_node(text: str):
-    """
-    Detects if the message matches a Knowledge Tree Node.
-    Returns: (is_match, matched_title, confidence, node_data)
-    """
-    from core.database import knowledge_node_repo
-    from rapidfuzz import process, fuzz
-    
-    nodes = knowledge_node_repo.get_all(limit=1000)
-    text_lower = text.lower().strip()
-    
-    all_phrases = []
-    for node in nodes:
-        if getattr(node, "status", "active") != "active":
-            continue
-            
-        title = getattr(node, "title", "")
-        if title:
-            all_phrases.append((title.lower(), title, node))
-            
-        for alias in getattr(node, "aliases", []):
-            if alias:
-                all_phrases.append((alias.lower(), title, node))
-                
-    if not all_phrases:
-        return False, "", 0.0, None
-        
-    phrase_dict = {p[0]: (p[1], p[2]) for p in all_phrases}
-    phrase_keys = list(phrase_dict.keys())
-    
-    # 1. Exact or substring match
-    all_phrases.sort(key=lambda x: len(x[0]), reverse=True)
-    for phrase_lower, match_title, node in all_phrases:
-        if phrase_lower and (phrase_lower in text_lower or text_lower in phrase_lower):
-            return True, match_title, 1.0, node
-            
-    # 2. Fuzzy match
-    result = process.extractOne(text_lower, phrase_keys, scorer=fuzz.token_set_ratio)
-    if result and result[1] >= 85:  # 85% confidence threshold for tree node aliases
-        matched_phrase = result[0]
-        score = result[1]
-        match_title, node = phrase_dict[matched_phrase]
-        return True, match_title, round(score / 100.0, 2), node
-        
-    return False, "", 0.0, None
-
-class FastPathRouterStep(PipelineStep):
-    def process(self, context: PipelineContext) -> PipelineStepResult:
-        fastpath_key, matched_phrase, confidence, response_text = detect_fastpath(context.normalized_message)
-        if fastpath_key:
-            response = FastPathService.get_response(fastpath_key)
-            prefix = context.metadata.get("greeting_prefix", "")
-            if prefix:
-                response = f"{prefix}\n\n{response}"
-            return PipelineStepResult(stop=True, intent="FastPath", response=response, metadata={"fastpath_key": fastpath_key})
-        return PipelineStepResult(stop=False)
 
 
 # backend/services/gibberish_service.py
@@ -826,26 +644,20 @@ class GibberishStep(PipelineStep):
                 components=[component]
             )
 
-        # Check for keyboard smashes or repeating characters
+        # Fast O(1) heuristic checks for INSTANT 1ms gibberish detection
         if re.search(r'(.)\1{4,}', text) or (len(text) < 2 and not text.isalnum()):
+            context.logger.info("Gibberish detected (Fast Regex): repeating chars or too short")
             return _get_gibberish_result()
             
-        # Check for consecutive consonants (5 or more usually means gibberish in English, e.g., kjhjk)
         if re.search(r'(?i)[bcdfghjklmnpqrstvwxz]{5,}', text):
+            context.logger.info("Gibberish detected (Fast Regex): 5+ consecutive consonants")
             return _get_gibberish_result()
-            
-        # Check for high consonant-to-vowel ratio as a sign of gibberish
-        if len(text) > 8:
-            vowels = sum(1 for c in text if c in 'aeiouy')
-            # If length > 8 and very few vowels (e.g. kjhjkbhiu has 2 vowels, 9 length. 9/2 = 4.5)
-            # Adjust ratio to be more aggressive for single words
-            words = text.split()
-            if len(words) == 1:
-                if vowels == 0 or (len(text) / vowels) >= 4:
-                    return _get_gibberish_result()
-            else:
-                if vowels == 0 or (len(text) / vowels) > 7:
-                    return _get_gibberish_result()
+
+        # Fallback to the advanced validate_query heuristic for more complex cases
+        validation_result = validate_query(text)
+        if not validation_result.get("isMeaningful", True):
+            context.logger.info(f"Gibberish detected (Advanced Engine): {validation_result.get('reason')}")
+            return _get_gibberish_result()
         
         return PipelineStepResult(stop=False)
 
@@ -854,6 +666,11 @@ class NormalizeStep(PipelineStep):
         from utils.normalizer import normalize_text
         context.normalized_message = normalize_text(context.original_message)
         context.metadata["normalized"] = True
+        context.metadata["original_query"] = context.original_message
+        context.metadata["normalized_query"] = context.normalized_message
+        context.metadata["input_length"] = len(context.original_message)
+        # Assuming English for now unless langdetect is used
+        context.metadata["language"] = "English"
         return PipelineStepResult(stop=False)
 
     def add_pattern(self, keyword: str, template: str, priority: int = 10):

@@ -115,19 +115,26 @@ class LLMRouter:
 
 _llm_instance = None
 
+def initialize_llm_provider():
+    global _llm_instance
+    if _llm_instance is not None:
+        return
+        
+    if os.environ.get("GROK_API_KEY"):
+        try:
+            _llm_instance = GrokProvider()
+        except Exception as e:
+            logger.error(f"Failed to init GrokProvider: {e}")
+            _llm_instance = GroqProvider() if os.environ.get("GROQ_API_KEY") else GeminiProvider()
+    elif os.environ.get("GROQ_API_KEY"):
+        _llm_instance = GroqProvider()
+    else:
+        _llm_instance = GeminiProvider()
+
 def get_llm_provider():
     global _llm_instance
     if not _llm_instance:
-        if os.environ.get("GROK_API_KEY"):
-            try:
-                _llm_instance = GrokProvider()
-            except Exception as e:
-                logger.error(f"Failed to init GrokProvider: {e}")
-                _llm_instance = GroqProvider() if os.environ.get("GROQ_API_KEY") else GeminiProvider()
-        elif os.environ.get("GROQ_API_KEY"):
-            _llm_instance = GroqProvider()
-        else:
-            _llm_instance = GeminiProvider()
+        raise RuntimeError("LLM provider was not initialized at startup. Call initialize_llm_provider() first.")
     return _llm_instance
 
 

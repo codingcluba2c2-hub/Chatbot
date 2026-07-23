@@ -18,9 +18,9 @@ class BaseEntity(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
-    created_by: str = "system"
-    updated_by: str = "system"
-    status: str = "active"
+    created_by: Optional[str] = "system"
+    updated_by: Optional[str] = "system"
+    status: Optional[str] = "active"
 
 class GreetingBase(BaseModel):
     name: str
@@ -34,41 +34,19 @@ class GreetingBase(BaseModel):
 class Greeting(BaseEntity, GreetingBase):
     pass
 
-class FarewellBase(BaseModel):
-    name: str
-    intent: str = "Farewell"
-    priority: int = 1
-    alias: List[str] = Field(default_factory=list)
-    regex: Optional[str] = None
-    response: str = ""
-    enabled: bool = True
-
-class Farewell(BaseEntity, FarewellBase):
-    pass
 
 class FAQBase(BaseModel):
-    question: str
+    title: str
+    answer: Optional[str] = ""
     aliases: List[str] = []
-    answer: str
-    category: str = "general"
-    keywords: List[str] = []
-    priority: int = 1
-    language: str = "en"
-    enabled: bool = True
+    regex_pattern: Optional[str] = None
+    parent_id: Optional[str] = None
+    display_type: str = "Standard"
+    show_children_buttons: bool = False
+    icon: Optional[str] = None
+    status: Optional[str] = "active"
 
 class FAQ(BaseEntity, FAQBase):
-    pass
-
-class FastPathBase(BaseModel):
-    trigger: str
-    aliases: List[str] = []
-    intent: str = "FastPath"
-    response: str
-    quick_actions: List[str] = []
-    priority: int = 1
-    enabled: bool = True
-
-class FastPath(BaseEntity, FastPathBase):
     pass
 
 
@@ -119,26 +97,6 @@ class KnowledgeSettings(BaseModel):
     similarity_threshold: float = 0.75
     top_k: int = 5
     updated_at: float = Field(default_factory=time.time)
-
-class KnowledgeNode(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    parent_id: Optional[str] = None
-    title: str
-    slug: Optional[str] = None
-    description: Optional[str] = None
-    response_markdown: Optional[str] = None
-    node_type: str = "standard"
-    icon: Optional[str] = None
-    image: Optional[str] = None
-    priority: int = 1
-    sort_order: int = 1
-    status: str = "active"
-    aliases: List[str] = Field(default_factory=list)
-    created_at: float = Field(default_factory=time.time)
-    updated_at: float = Field(default_factory=time.time)
-    created_by: str = "system"
-    updated_by: str = "system"
-
 
 
 class ChatRequest(BaseModel):

@@ -18,15 +18,16 @@ USE_LLM_FOR_RAG = os.getenv("USE_LLM_FOR_RAG", "true").lower() == "true"
 # Order of pipeline steps to execute
 PIPELINE_STEPS: List[str] = [
     "Normalize",
-    "GreetingFarewell",
+    "ResponseCacheStep",
+    "SpellCorrection",
+    "Greeting",
     "FollowUpResolver",
     "ConversationContextResolver",
-    "Memory",
-    "KnowledgeTree",
+    "FAQ",
+    "MeaningfulValidator",
     "Gibberish",
     "AbuseDetection",
-    "FastPath",
-    "FAQ",
+    "Memory",
     "KnowledgeSearch",
     "ResponseGenerator"
 ]

@@ -14,81 +14,87 @@ import json
 from core.logger import get_logger
 from chatbot.utils import limiter
 
-from chatbot.detector import FastPathRouterStep, GibberishStep, NormalizeStep
+from chatbot.detector import GibberishStep, NormalizeStep
 from chatbot.followup import FollowUpResolverStep
 from chatbot.context_resolver import ConversationContextResolverStep
 from chatbot.abuse import AbuseDetectionStep
-from chatbot.greeting import GreetingFarewellStep
+from chatbot.greeting import GreetingStep
 from chatbot.faq import FAQStep
-from chatbot.rag import KnowledgeSearchStep, ResponseGeneratorStep
-from services.knowledge import KnowledgeTreeStep
-from chatbot.memory import MemoryDetectorStep
-from core.schemas import ChatResponse, ChatRequest
-
+from core.schemas import ChatResponse
+from chatbot.fast_pipeline import run_fast_pipeline
 
 # backend/api/routes/chat.py
 
 
 pipeline_runner = PipelineRunner()
 pipeline_runner.register_step("Normalize", NormalizeStep())
-pipeline_runner.register_step("GreetingFarewell", GreetingFarewellStep())
-pipeline_runner.register_step("FollowUpResolver", FollowUpResolverStep())
-pipeline_runner.register_step("ConversationContextResolver", ConversationContextResolverStep())
-pipeline_runner.register_step("Memory", MemoryDetectorStep())
-pipeline_runner.register_step("KnowledgeTree", KnowledgeTreeStep())
+from chatbot.nlp_steps import SpellCorrectionStep, AliasExpansionStep, QueryRewriteStep
+pipeline_runner.register_step("SpellCorrectionStep", SpellCorrectionStep())
+pipeline_runner.register_step("AliasExpansionStep", AliasExpansionStep())
+pipeline_runner.register_step("QueryRewriteStep", QueryRewriteStep())
+from chatbot.pipeline import ResponseCacheStep
+pipeline_runner.register_step("ResponseCacheStep", ResponseCacheStep())
+from chatbot.memory import ConversationMemoryStep
+pipeline_runner.register_step("ConversationMemoryStep", ConversationMemoryStep())
+pipeline_runner.register_step("FollowUpResolverStep", FollowUpResolverStep())
+from chatbot.router import IntentRouterStep
+pipeline_runner.register_step("IntentRouterStep", IntentRouterStep())
+pipeline_runner.register_step("Greeting", GreetingStep())
 pipeline_runner.register_step("Gibberish", GibberishStep())
 pipeline_runner.register_step("AbuseDetection", AbuseDetectionStep())
-pipeline_runner.register_step("FastPath", FastPathRouterStep())
 pipeline_runner.register_step("FAQ", FAQStep())
-pipeline_runner.register_step("KnowledgeSearch", KnowledgeSearchStep())
-pipeline_runner.register_step("ResponseGenerator", ResponseGeneratorStep())
+from chatbot.rag import KnowledgeSearchStep, ResponseGeneratorStep
+pipeline_runner.register_step("KnowledgeSearchStep", KnowledgeSearchStep())
+pipeline_runner.register_step("ResponseGeneratorStep", ResponseGeneratorStep())
 
 
 router = APIRouter()
 
 @router.on_event("startup")
 async def startup_event():
-    logger.info("Application Startup: Initializing Singletons...")
-    from services.embeddings import get_embedding_provider
-    from services.vectorstore import get_vector_store
-    from chatbot.llm import get_llm_provider
-    from chatbot.rag import Retriever
-    
-    get_embedding_provider()
-    get_vector_store()
-    get_llm_provider()
-    
-    try:
-        # Pre-initialize retriever to ensure models are hot
-        Retriever()
-        logger.info("Singletons Initialized successfully.")
-    except Exception as e:
-        logger.error(f"Failed to initialize singletons: {e}")
+    logger.info("UltraFastEngine API routes initialized.")
 
-@router.post("/chat", response_model=ChatResponse)
-@limiter.limit("10/minute")
-async def chat_endpoint(request: Request, chat_request: ChatRequest):
+@router.post("/chat")
+# @limiter.limit("10/minute")
+async def chat_endpoint(request: Request):
+    req_data = await request.json()
+    message = req_data.get("message", "")
+    session_id = req_data.get("session_id", "default")
+    metadata = req_data.get("metadata", {})
+    
+    fast_result = run_fast_pipeline(message, session_id, metadata)
+    if fast_result.get("success"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(content=fast_result)
+        
     context = PipelineContext(
-        original_message=request.message,
-        session_id=request.session_id,
-        conversation_id=request.conversation_id
+        original_message=message,
+        session_id=session_id,
+        conversation_id=req_data.get("conversation_id", "default")
     )
-    # Propagate metadata payload to context so workflows can read action/form data
-    context.metadata.update(request.metadata)
+    context.metadata.update(metadata)
+    context.metadata["route"] = fast_result.get("forward_to", "RAG")
+    context.normalized_message = fast_result.get("normalized", message)
+    if fast_result.get("alias_intent"):
+        context.current_intent = fast_result.get("alias_intent")
+    if fast_result.get("entities"):
+        context.entities.update(fast_result.get("entities"))
+    if fast_result.get("trace"):
+        context.metadata["fast_trace"] = fast_result.get("trace")
     
     result = pipeline_runner.process(context)
     
+    from fastapi.responses import JSONResponse
     if result.get("success") is False:
-        from fastapi.responses import JSONResponse
         return JSONResponse(status_code=500, content=result)
         
-    return ChatResponse(
-        intent=result["intent"],
-        response=result["response"],
-        components=result.get("components", []),
-        actions=result.get("actions", []),
-        trace=result.get("trace")
-    )
+    return JSONResponse(content={
+        "intent": result["intent"],
+        "response": result["response"],
+        "components": result.get("components", []),
+        "actions": result.get("actions", []),
+        "trace": result.get("trace")
+    })
 
 
 # backend/api/routes/chat_ws.py
@@ -150,12 +156,25 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                 conversation_id = request_data.get("conversation_id", "default")
                 metadata = request_data.get("metadata", {})
                 
+                fast_result = run_fast_pipeline(message, session_id, metadata)
+                if fast_result.get("success"):
+                    await manager.send_personal_message({"type": "done", **fast_result}, client_id)
+                    continue
+                    
                 context = PipelineContext(
                     original_message=message,
                     session_id=session_id,
                     conversation_id=conversation_id
                 )
                 context.metadata.update(metadata)
+                context.metadata["route"] = fast_result.get("forward_to", "RAG")
+                context.normalized_message = fast_result.get("normalized", message)
+                if fast_result.get("alias_intent"):
+                    context.current_intent = fast_result.get("alias_intent")
+                if fast_result.get("entities"):
+                    context.entities.update(fast_result.get("entities"))
+                if fast_result.get("trace"):
+                    context.metadata["fast_trace"] = fast_result.get("trace")
                 
                 async for event in pipeline_runner.process_stream(context):
                     if client_id not in manager.active_connections:
@@ -198,6 +217,7 @@ def liveness_check():
 
 @router.get("/readiness")
 def readiness_check():
+    from core.database import engine
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))

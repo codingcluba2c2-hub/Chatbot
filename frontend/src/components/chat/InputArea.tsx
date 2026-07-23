@@ -58,7 +58,7 @@ export const InputArea = forwardRef<InputAreaRef, InputAreaProps>(({ input, setI
           onKeyDown={onKeyDown}
           placeholder="Type your message..."
           rows={1}
-          className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-[13px] md:text-[15px] py-2.5 px-2 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-800 dark:text-gray-100 font-medium leading-relaxed"
+          className="flex-1 max-h-[120px] bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-[13px] md:text-[14px] py-2 px-2 custom-scrollbar placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-800 dark:text-gray-100 font-medium leading-relaxed"
         />
 
         {/* Right Actions */}

@@ -143,7 +143,7 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                 )}
                 {activeTab === 'logs' && (
                   <div className="font-mono text-[11px] p-3 rounded-md bg-slate-900 border border-slate-800 space-y-1">
-                    {trace.steps.map((s:any, idx:number) => (
+                    {trace.steps?.map((s:any, idx:number) => (
                       <div key={idx} className="flex gap-2">
                         <span className="text-slate-500">[{new Date(s.start_time * 1000).toISOString().split('T')[1].slice(0,-1)}]</span>
                         <span className={s.status === 'failed' ? 'text-red-400' : 'text-blue-400'}>INFO</span>
@@ -255,7 +255,7 @@ export const DeveloperSidebar: React.FC<DeveloperSidebarProps> = ({ isOpen, onCl
                               <span className="text-slate-300 font-semibold text-xs">Memory Engine:</span>
                               <span className="text-emerald-400 font-bold">{trace.metadata.memory_intent}</span>
                             </div>
-                            
+
                             <div className="flex justify-between items-center mt-1">
                               <span className="text-slate-400 text-[11px]">Detected Field:</span>
                               <span className="text-amber-300 bg-slate-900 px-1.5 py-0.5 rounded text-[11px]">{trace.metadata.detected_field}</span>

@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowDown, Calendar, LayoutGrid, Briefcase, Mail, CheckSquare, Star } from 'lucide-react';
 import { ChatMessage, MessageProps } from './ChatMessage';
 import { TypingIndicator } from './TypingIndicator';
-import { ThinkingIndicator } from './ThinkingIndicator';
 import { isSameDay, format } from 'date-fns';
 
 interface ChatBodyProps {
@@ -126,13 +125,7 @@ export const ChatBody: React.FC<ChatBodyProps> = ({ messages, botState, onSugges
               );
             })}
             
-            {botState === 'thinking' && (!messages.length || messages[messages.length-1].role !== 'bot' || !messages[messages.length-1].content) && (
-              <motion.div key="thinking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <ThinkingIndicator />
-              </motion.div>
-            )}
-            
-            {botState === 'typing' && (!messages.length || messages[messages.length-1].role !== 'bot' || !messages[messages.length-1].content) && (
+            {(botState === 'thinking' || botState === 'typing') && (!messages.length || messages[messages.length-1].role !== 'bot' || !messages[messages.length-1].content) && (
               <motion.div key="typing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <TypingIndicator />
               </motion.div>

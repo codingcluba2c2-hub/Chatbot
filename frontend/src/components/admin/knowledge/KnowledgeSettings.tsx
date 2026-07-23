@@ -19,7 +19,7 @@ export const KnowledgeSettings = () => {
 
   const fetchSettings = async () => {
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
       const res = await fetch(`${backendUrl}/api/knowledge/settings`);
       if (res.ok) {
         const data = await res.json();
@@ -36,7 +36,7 @@ export const KnowledgeSettings = () => {
     setSaving(true);
     setMessage(null);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
       const res = await fetch(`${backendUrl}/api/knowledge/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

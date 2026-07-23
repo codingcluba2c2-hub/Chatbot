@@ -141,126 +141,16 @@ class MemoryDetectorStep(PipelineStep):
             return PipelineResult(
                 continue_pipeline=False,
                 stop=True,
-                intent="Memory (Lookup)",
-                response=final_resp
-            )
-                
-        return PipelineResult(continue_pipeline=True)
-
-
-class ConversationMemoryService:
-    _CACHE = {}
-    MAX_TURNS = 5
-
-    @classmethod
-    def _initialize_memory(cls, session_id: str):
-        if session_id not in cls._CACHE:
-            cls._CACHE[session_id] = {
-                "messages": [],
-                "facts": {},
-                "entities": {},
-                "conversation_context": {}
-            }
-            
-    @classmethod
-    def get_memory(cls, session_id: str):
-        cls._initialize_memory(session_id)
-        data = cls._CACHE[session_id]
-        
-        return {
-            "conversation_id": session_id,
-            "session_id": session_id,
-            "messages": data["messages"],
-            "facts": data["facts"],
-            "entities": data["entities"],
-            "metadata": {}
-        }
-        
-    @classmethod
-    def clear_memory(cls, session_id: str):
-        if session_id in cls._CACHE:
-            cls._CACHE[session_id]["facts"] = {}
-            cls._CACHE[session_id]["entities"] = {}
-            cls._CACHE[session_id]["conversation_context"] = {}
-            cls._CACHE[session_id]["messages"] = []
-            
-    @classmethod
-    def add_message(cls, session_id: str, role: str, content: str, intent=None, trace=None, conversation_id=None):
-        import time
-        cls._initialize_memory(session_id)
-        messages = cls._CACHE[session_id]["messages"]
-        messages.append({
-            "role": role,
-            "content": content,
-            "intent": intent,
-            "timestamp": time.time()
-        })
-        if len(messages) > cls.MAX_TURNS:
-            cls._CACHE[session_id]["messages"] = messages[-cls.MAX_TURNS:]
-
-    @classmethod
-    def add_fact(cls, session_id: str, key: str, value):
-        cls._initialize_memory(session_id)
-        cls._CACHE[session_id]["facts"][key] = value
-
-    @classmethod
-    def get_fact(cls, session_id: str, key: str):
-        if session_id not in cls._CACHE: return None
-        return cls._CACHE[session_id]["facts"].get(key)
-        
-    @classmethod
-    def add_entity(cls, session_id: str, entity_type: str, value: str):
-        cls._initialize_memory(session_id)
-        entities = cls._CACHE[session_id]["entities"]
-        if entity_type not in entities: entities[entity_type] = []
-        if value not in entities[entity_type]: entities[entity_type].append(value)
-
-    @classmethod
-    def get_context(cls, session_id: str):
-        cls._initialize_memory(session_id)
-        context = cls._CACHE[session_id].get("conversation_context", {})
-        return {
-            "conversation_id": context.get("conversation_id", session_id),
-            "current_topic": context.get("current_topic", ""),
-            "last_intent": context.get("last_intent", ""),
-            "last_entities": context.get("last_entities", []),
-            "last_memory_operation": context.get("last_memory_operation", ""),
-            "last_knowledge_node": context.get("last_knowledge_node", ""),
-            "last_rag_document": context.get("last_rag_document", ""),
-            "last_selected_button": context.get("last_selected_button", "")
-        }
-
-    @classmethod
-    def update_context(cls, session_id: str, new_data):
-        cls._initialize_memory(session_id)
-        cls._CACHE[session_id]["conversation_context"].update(new_data)
-
-    @classmethod
-    def add_structured_turn(cls, session_id: str, turn_data):
-        cls._initialize_memory(session_id)
-        turns = cls.get_fact(session_id, "structured_turns") or []
-        turns.append(turn_data)
-        if len(turns) > 10: turns = turns[-10:]
-        cls.add_fact(session_id, "structured_turns", turns)
-
-
-import uuid
-
-class SessionManager:
-    _sessions = {}
-    SESSION_TTL = 3600 * 24
-
     @classmethod
     def generate_session_id(cls) -> str:
         return str(uuid.uuid4())
 
     @classmethod
-    def create_session(cls, session_id: str = None) -> str:
-        import time
+    def create_session(cls, session_id: Optional[str] = None) -> str:
+        """Returns existing session_id or creates a new one."""
         if session_id and session_id in cls._sessions:
             cls._sessions[session_id]["updated_at"] = time.time()
             return session_id
-
             
         new_session_id = session_id or cls.generate_session_id()
         cls._sessions[new_session_id] = {
@@ -291,7 +181,6 @@ class SessionManager:
 
     @classmethod
     def expire_sessions(cls):
-        import time
         current_time = time.time()
         expired = [sid for sid, data in cls._sessions.items() if current_time - data["updated_at"] > cls.SESSION_TTL]
         for sid in expired:
@@ -299,7 +188,6 @@ class SessionManager:
             
     @classmethod
     def clear_session_data(cls, session_id: str):
-        import time
         if session_id in cls._sessions:
             cls._sessions[session_id] = {
                 "session_id": session_id,
@@ -307,10 +195,14 @@ class SessionManager:
                 "updated_at": time.time(),
             }
 
+
+# backend/services/memory_lookup_service.py
 import re
 from typing import Optional, Tuple
+from chatbot.memory import ConversationMemoryService
 
 class MemoryLookupService:
+    # Mapping of question patterns to fact keys
     LOOKUP_PATTERNS = [
         (r"(?i)who am i\??", "user_name"),
         (r"(?i)what is my name\??", "user_name"),
@@ -325,6 +217,7 @@ class MemoryLookupService:
         (r"(?i)what do i like\??", "interest")
     ]
     
+    # Mapping of fact keys to response templates
     RESPONSE_TEMPLATES = {
         "user_name": "Your name is {value}.",
         "location": "Your location is {value}.",

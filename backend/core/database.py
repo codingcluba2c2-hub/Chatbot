@@ -291,16 +291,12 @@ class AuditLogRepository(BaseRepository[AuditLog, AuditLogDB]):
 class GreetingRepository(BaseRepository[Greeting, GreetingDB]):
     pass
 
-class FarewellRepository(BaseRepository[Farewell, FarewellDB]):
-    pass
 
 class FAQRepository(BaseRepository[FAQ, FAQDB]):
     pass
 
 
 
-class FastPathRepository(BaseRepository[FastPath, FastPathDB]):
-    pass
 
 class DocumentRepository(BaseRepository[KnowledgeDocument, KnowledgeDocumentDB]):
     pass
@@ -311,8 +307,6 @@ class ChunkRepository(BaseRepository[DocumentChunk, DocumentChunkDB]):
 class KnowledgeSettingsRepository(BaseRepository[KnowledgeSettings, KnowledgeSettingsDB]):
     pass
 
-class KnowledgeNodeRepository(BaseRepository[KnowledgeNode, KnowledgeNodeDB]):
-    pass
 
 _instances = {}
 
@@ -322,16 +316,15 @@ def _get_repo(name: str):
             _instances[name] = AuditLogRepository(AuditLog, AuditLogDB)
         elif name == "greeting_repo":
             _instances[name] = GreetingRepository(Greeting, GreetingDB)
-        elif name == "farewell_repo":
-            _instances[name] = FarewellRepository(Farewell, FarewellDB)
         elif name == "faq_repo":
             _instances[name] = FAQRepository(FAQ, FAQDB)
-        elif name == "fastpath_repo":
-            _instances[name] = FastPathRepository(FastPath, FastPathDB)
+
         elif name == "document_repo":
             _instances[name] = DocumentRepository(KnowledgeDocument, KnowledgeDocumentDB)
         elif name == "chunk_repo":
             _instances[name] = ChunkRepository(DocumentChunk, DocumentChunkDB)
+        elif name == "settings_repo":
+            _instances[name] = KnowledgeSettingsRepository(KnowledgeSettings, KnowledgeSettingsDB)
         elif name == "settings_repo":
             _instances[name] = KnowledgeSettingsRepository(KnowledgeSettings, KnowledgeSettingsDB)
         elif name == "conversation_repo":
@@ -340,16 +333,15 @@ def _get_repo(name: str):
             _instances[name] = MessageRepository()
         elif name == "fact_repo":
             _instances[name] = FactRepository()
-        elif name == "knowledge_node_repo":
-            _instances[name] = KnowledgeNodeRepository(KnowledgeNode, KnowledgeNodeDB)
+
         else:
             raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     return _instances[name]
 
 def __getattr__(name):
-    if name in ["audit_repo", "greeting_repo", "farewell_repo", "faq_repo", 
-                "fastpath_repo", "document_repo", "chunk_repo", "settings_repo", 
-                "conversation_repo", "message_repo", "fact_repo", "knowledge_node_repo"]:
+    if name in ["audit_repo", "greeting_repo", "faq_repo", 
+                "document_repo", "chunk_repo", "settings_repo", 
+                "conversation_repo", "message_repo", "fact_repo"]:
         return _get_repo(name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
@@ -372,14 +364,6 @@ def seed_data():
         for g in GREETING_RESPONSES:
             greeting_repo.create(Greeting(name="Default Greeting", response=g))
             
-    if fastpath_repo.count() == 0:
-        for key, text in FASTPATH_RESPONSES.items():
-            fastpath_repo.create(FastPath(
-                trigger=key.replace("_", " ").title(),
-                aliases=[key, key.replace("_", "")],
-                response=text
-            ))
-
 # Seed data will be called from app.py during startup
 
 

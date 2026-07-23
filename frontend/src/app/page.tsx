@@ -122,8 +122,22 @@ export default function Home() {
     }
   }, []);
 
-  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
-  const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
+  const [wsUrl, setWsUrl] = useState("");
+  const [backendUrl, setBackendUrl] = useState("");
+
+  useEffect(() => {
+    let api = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+    if (!api && typeof window !== "undefined") {
+      api = `http://${window.location.hostname}:8001`;
+    }
+    setBackendUrl(api);
+    
+    let ws = process.env.NEXT_PUBLIC_WS_URL || "";
+    if (!ws && api) {
+      ws = api.replace("http://", "ws://").replace("https://", "wss://") + "/ws/chat";
+    }
+    setWsUrl(ws);
+  }, []);
 
   const { sendMessage: sendWsMessage } = useWebSocket(
     wsUrl,
@@ -164,7 +178,7 @@ export default function Home() {
 
   const handleClearChat = useCallback(async () => {
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
       await fetch(`${backendUrl}/api/session/clear?session_id=${sessionId}`, { method: 'DELETE' });
     } catch (e) {
       console.error("Failed to clear backend session:", e);

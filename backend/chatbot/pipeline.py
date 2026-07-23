@@ -54,6 +54,22 @@ class PipelineStep:
         raise NotImplementedError("Subclasses must implement process()")
 
 from core.config import PIPELINE_STEPS, DEVELOPER_MODE
+from cachetools import TTLCache
+
+response_cache = TTLCache(maxsize=1000, ttl=600)
+
+class ResponseCacheStep(PipelineStep):
+    def process(self, context: PipelineContext) -> PipelineStepResult:
+        query = context.normalized_message.lower().strip()
+        if query in response_cache:
+            cached_res = response_cache[query]
+            return PipelineStepResult(
+                stop=True,
+                intent=cached_res.get("intent", "Cached"),
+                response=cached_res.get("response", ""),
+                metadata={"cache_hit": True}
+            )
+        return PipelineStepResult(stop=False)
 
 # backend/pipeline/pipeline_runner.py
 
@@ -73,7 +89,13 @@ class PipelineRunner:
         final_intent = "Fallback"
         final_response = ""
         
-        for step_name in PIPELINE_STEPS:
+        # New Router Architecture
+        steps_to_run = ["Normalize", "QueryRewriteStep", "SpellCorrectionStep", "AliasExpansionStep", "ConversationMemoryStep", "FollowUpResolverStep", "ResponseCacheStep", "IntentRouterStep"]
+        
+        step_idx = 0
+        while step_idx < len(steps_to_run):
+            step_name = steps_to_run[step_idx]
+            step_idx += 1
             if step_name not in self.steps:
                 logger.warning(f"Step '{step_name}' is configured but not registered. Skipping.")
                 continue
@@ -117,7 +139,8 @@ class PipelineRunner:
             # Capture state after step
             output_state = {
                 "message": context.normalized_message,
-                "entities": dict(context.entities)
+                "entities": dict(context.entities),
+                "response": result.response if hasattr(result, 'response') else None
             }
             
             if DEVELOPER_MODE:
@@ -130,7 +153,7 @@ class PipelineRunner:
                     "input": input_state,
                     "output": output_state,
                     "decision": decision,
-                    "metadata": result.metadata if hasattr(result, 'metadata') else {}
+                    "metadata": {**context.metadata, **(result.metadata if hasattr(result, 'metadata') else {})}
                 })
             
             logger.info(f"Finished step: {step_name} - Execution Time: {duration_ms:.2f} ms - Decision: {decision}")
@@ -164,10 +187,28 @@ class PipelineRunner:
             if hasattr(result, 'actions') and result.actions:
                 final_actions = getattr(result, 'actions', [])
                 
+            if step_name == "IntentRouterStep":
+                route = result.metadata.get("route", "RAG")
+                if route == "Greeting":
+                    steps_to_run.append("Greeting")
+                elif route == "Gibberish":
+                    steps_to_run.append("Gibberish")
+                elif route == "FAQ":
+                    steps_to_run.append("FAQ")
+                elif route == "KnowledgeTree":
+                    steps_to_run.append("KnowledgeTree")
+                else:
+                    steps_to_run.extend(["KnowledgeSearchStep", "ResponseGeneratorStep"])
+                    
             if hasattr(result, 'stop') and result.stop:
                 break
                 
         total_time = (time.perf_counter() - total_start) * 1000
+        
+        fast_trace = context.metadata.get("fast_trace", {})
+        if fast_trace:
+            trace_steps = fast_trace.get("steps", []) + trace_steps
+            total_time += fast_trace.get("totalBackendTimeMs", 0)
         
         # Part 6: Response Time Logging
         logger.info("=========================================")
@@ -177,7 +218,25 @@ class PipelineRunner:
             logger.info(f"{trace['step_name']:<22} {trace['duration']:>6.0f} ms")
         logger.info("-----------------------------------------")
         logger.info(f"{'TOTAL':<22} {total_time:>6.0f} ms")
-        logger.info("=========================================")
+        
+        # Add detailed RAG pipeline logs if applicable
+        if "rag_chunks" in context.metadata:
+            logger.info("Retrieved")
+            logger.info(str(context.metadata.get("retrieved_chunks_count", 0)))
+            logger.info("Selected")
+            logger.info(str(context.metadata.get("selected_chunks_count", 0)))
+            logger.info("Discarded")
+            logger.info(str(context.metadata.get("discarded_chunks_count", 0)))
+            logger.info("Merged")
+            logger.info(str(context.metadata.get("merged_chunks_count", 0)))
+            logger.info("Provider")
+            logger.info(str(context.metadata.get("Chosen Provider", "Local Formatter")))
+            logger.info("LLM")
+            logger.info(str(context.metadata.get("llm_used", False)))
+            logger.info("Formatting")
+            logger.info(f"{context.metadata.get('formatting_time_ms', 0)}ms")
+            logger.info("Response Length")
+            logger.info(f"{context.metadata.get('response_length', 0)} chars")
         
         from chatbot.memory import ConversationMemoryService
         context_updates = {
@@ -239,6 +298,13 @@ class PipelineRunner:
         if DEVELOPER_MODE:
             response_obj["trace"] = trace
             
+        # Store in cache if successful and not a fallback
+        if final_intent != "Fallback" and final_response:
+            response_cache[context.normalized_message.lower().strip()] = {
+                "intent": final_intent,
+                "response": final_response
+            }
+            
         return response_obj
 
     async def process_stream(self, context: PipelineContext):
@@ -261,7 +327,12 @@ class PipelineRunner:
             "entities": dict(context.entities)
         }
         
-        for step_name in PIPELINE_STEPS:
+        steps_to_run = ["Normalize", "QueryRewriteStep", "SpellCorrectionStep", "AliasExpansionStep", "ConversationMemoryStep", "FollowUpResolverStep", "ResponseCacheStep", "IntentRouterStep"]
+        
+        step_idx = 0
+        while step_idx < len(steps_to_run):
+            step_name = steps_to_run[step_idx]
+            step_idx += 1
             if step_name not in self.steps:
                 continue
                 
@@ -298,7 +369,8 @@ class PipelineRunner:
                 # Capture state after step
                 output_state = {
                     "message": context.normalized_message,
-                    "entities": dict(context.entities)
+                    "entities": dict(context.entities),
+                    "response": result.response if hasattr(result, 'response') else None
                 }
                 
                 if DEVELOPER_MODE:
@@ -311,7 +383,7 @@ class PipelineRunner:
                         "input": input_state,
                         "output": output_state,
                         "decision": decision,
-                        "metadata": result.metadata if hasattr(result, 'metadata') else {}
+                        "metadata": {**context.metadata, **(result.metadata if hasattr(result, 'metadata') else {})}
                     })
                     # Reset input_state for next step
                     input_state = output_state
@@ -343,16 +415,20 @@ class PipelineRunner:
                 if hasattr(result, 'actions') and result.actions:
                     final_actions = getattr(result, 'actions', [])
                     
+                if step_name == "IntentRouterStep":
+                    route = result.metadata.get("route", "RAG")
+                    if route == "Greeting":
+                        steps_to_run.append("Greeting")
+                    elif route == "Gibberish":
+                        steps_to_run.append("Gibberish")
+                    elif route == "FAQ":
+                        steps_to_run.append("FAQ")
+                    elif route == "KnowledgeTree":
+                        steps_to_run.append("KnowledgeTree")
+                    else:
+                        steps_to_run.extend(["KnowledgeSearchStep", "ResponseGeneratorStep"])
+                        
                 if result.stop:
-                    # If a step stops the pipeline (e.g., FAQ, Greeting, LLM)
-                    # we stream its response artificially
-                    if final_response:
-                        # Fake streaming for UX
-                        words = final_response.split(" ")
-                        chunk_size = max(1, len(words) // 30) # Split into 30 frames
-                        for i in range(0, len(words), chunk_size):
-                            yield {"type": "stream", "chunk": " ".join(words[i:i+chunk_size]) + " "}
-                            await asyncio.sleep(0.02)
                     break
                     
             except Exception as e:
@@ -382,15 +458,70 @@ class PipelineRunner:
 
         total_time = (time.perf_counter() - total_start) * 1000
         
+        fast_trace = context.metadata.get("fast_trace", {})
+        if fast_trace:
+            trace_steps = fast_trace.get("steps", []) + trace_steps
+            total_time += fast_trace.get("totalBackendTimeMs", 0)
+            
+        logger.info("=========================================")
+        logger.info("PIPELINE EXECUTION SUMMARY (STREAM)")
+        logger.info("=========================================")
+        for trace in trace_steps:
+            logger.info(f"{trace['step_name']:<22} {trace['duration']:>6.0f} ms")
+        logger.info("-----------------------------------------")
+        logger.info(f"{'TOTAL':<22} {total_time:>6.0f} ms")
+        
+        if "rag_chunks" in context.metadata:
+            logger.info("Retrieved")
+            logger.info(str(context.metadata.get("retrieved_chunks_count", 0)))
+            logger.info("Selected")
+            logger.info(str(context.metadata.get("selected_chunks_count", 0)))
+            logger.info("Discarded")
+            logger.info(str(context.metadata.get("discarded_chunks_count", 0)))
+            logger.info("Merged")
+            logger.info(str(context.metadata.get("merged_chunks_count", 0)))
+            logger.info("Provider")
+            logger.info(str(context.metadata.get("Chosen Provider", "Local Formatter")))
+            logger.info("LLM")
+            logger.info(str(context.metadata.get("llm_used", False)))
+            logger.info("Formatting")
+            logger.info(f"{context.metadata.get('formatting_time_ms', 0)}ms")
+            logger.info("Response Length")
+            logger.info(f"{context.metadata.get('response_length', 0)} chars")
+        
         # Global prefix handling is removed because individual steps handle it themselves
             
+        # Send the final response to the user INSTANTLY before blocking on DB saves
         from chatbot.memory import ConversationMemoryService
+        global_context = await asyncio.to_thread(ConversationMemoryService.get_context, context.session_id)
+        
+        yield {
+            "type": "done",
+            "intent": final_intent,
+            "response": final_response,
+            "components": final_components,
+            "actions": final_actions,
+            "trace": {
+                "totalBackendTimeMs": round(total_time, 3),
+                "global_context": global_context,
+                "steps": trace_steps,
+                "metadata": dict(context.metadata)
+            } if DEVELOPER_MODE else None
+        }
+            
+        if final_intent != "Fallback" and final_response:
+            response_cache[context.normalized_message.lower().strip()] = {
+                "intent": final_intent,
+                "response": final_response
+            }
+            
         context_updates = {
             "last_intent": final_intent
         }
         if context.entities:
             context_updates["last_entities"] = list(context.entities.values())
             
+        # Fire off slow synchronous DB commits
         await asyncio.to_thread(ConversationMemoryService.update_context, context.session_id, context_updates)
         
         from chatbot.state_manager import ConversationStateManager
@@ -416,22 +547,6 @@ class PipelineRunner:
             del state_updates["current_entity"]
             
         await asyncio.to_thread(ConversationStateManager.update_state, context.session_id, state_updates)
-        
-        global_context = await asyncio.to_thread(ConversationMemoryService.get_context, context.session_id)
-            
-        yield {
-            "type": "done",
-            "intent": final_intent,
-            "response": final_response,
-            "components": final_components,
-            "actions": final_actions,
-            "trace": {
-                "totalBackendTimeMs": round(total_time, 3),
-                "global_context": global_context,
-                "steps": trace_steps,
-                "metadata": dict(context.metadata)
-            } if DEVELOPER_MODE else None
-        }
 
 
 

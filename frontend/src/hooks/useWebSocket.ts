@@ -11,6 +11,7 @@ export function useWebSocket(
   const maxReconnectAttempts = 10;
 
   const connect = useCallback(() => {
+    if (!url) return;
     if (ws.current?.readyState === WebSocket.OPEN || ws.current?.readyState === WebSocket.CONNECTING) return;
 
     const socket = new WebSocket(url);
@@ -44,11 +45,14 @@ export function useWebSocket(
       }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if ((socket as any)?._pingInterval) {
         clearInterval((socket as any)._pingInterval);
       }
       onStatusChange('offline');
+      // Do not reconnect if it was a normal closure (e.g. component unmount)
+      if (event.code === 1000) return;
+      
       if (reconnectAttempts.current < maxReconnectAttempts) {
         const timeout = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
         setTimeout(() => {
@@ -60,7 +64,7 @@ export function useWebSocket(
 
     socket.onerror = (error) => {
       // Browsers often fire a generic Event that logs as {}
-      console.error('WebSocket Error encountered.');
+      // We don't need to log every time because onclose handles reconnects
       if (ws.current === socket) {
         ws.current.close();
       }

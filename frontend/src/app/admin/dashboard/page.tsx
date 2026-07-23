@@ -14,7 +14,7 @@ import {
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#64748b'];
 
 export default function DashboardPage() {
-  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
+  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
   
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-overview"],
@@ -47,7 +47,6 @@ export default function DashboardPage() {
   // Chart Data preparation
   const pipelineUsageData = [
     { name: "Greeting", count: data.kpis.greeting_requests },
-    { name: "FastPath", count: data.kpis.fastpath_requests },
     { name: "Memory", count: data.kpis.memory_hits },
     { name: "Cache", count: data.kpis.cache_hits },
     { name: "Retriever", count: data.kpis.retriever_hits },
@@ -58,7 +57,6 @@ export default function DashboardPage() {
   const requestDistributionData = [
     { name: "Greeting", value: data.kpis.greeting_requests },
     { name: "Knowledge", value: data.kpis.knowledge_requests },
-    { name: "FastPath", value: data.kpis.fastpath_requests },
     { name: "General", value: data.kpis.gemini_calls }
   ];
 
@@ -155,7 +153,6 @@ export default function DashboardPage() {
             {[
               { label: "Requests", value: data.kpis.todays_requests, color: "text-blue-500" },
               { label: "Greetings", value: data.kpis.greeting_requests, color: "text-slate-500" },
-              { label: "FastPaths", value: data.kpis.fastpath_requests, color: "text-amber-500" },
               { label: "Knowledge", value: data.kpis.knowledge_requests, color: "text-purple-500" },
               { label: "RAG Res", value: data.kpis.rag_responses, color: "text-emerald-500" },
               { label: "Cache Hit", value: data.kpis.cache_hits, color: "text-emerald-400" },

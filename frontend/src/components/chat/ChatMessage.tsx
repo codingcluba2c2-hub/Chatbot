@@ -162,9 +162,8 @@ export const ChatMessage: React.FC<MessageProps> = ({ role, content, intent, tim
       {/* Message Bubble Container */}
       <div className={cn("flex flex-col max-w-[80%]", isBot ? "items-start" : "items-end")}>
 
-        {/* Bubble */}
         <div className={cn(
-          "relative px-5 py-4 text-[14px] md:text-[15px] xl:text-[16px] leading-relaxed break-words whitespace-pre-wrap transition-all duration-300",
+          "relative px-4 py-3 text-[13px] md:text-[14px] leading-relaxed break-words whitespace-pre-wrap transition-all duration-300",
           isBot 
             ? "bg-white border border-gray-200/60 text-gray-800 rounded-2xl rounded-tl-sm dark:bg-[#1E293B] dark:border-slate-700/50 dark:text-gray-100 shadow-sm hover:shadow-md"
             : "bg-gradient-to-br from-[#0f172a] to-[#1e293b] dark:from-blue-600 dark:to-blue-800 border border-slate-700/50 dark:border-blue-500/30 text-white rounded-2xl rounded-tr-sm shadow-md"

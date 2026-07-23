@@ -4,18 +4,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Trash2, Edit2, Loader2, Save, X, Hand, MessageSquare } from "lucide-react";
 
 export default function ConversationsPage() {
-  const [activeTab, setActiveTab] = useState<"greetings" | "farewells">("greetings");
   const [search, setSearch] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
   
   const queryClient = useQueryClient();
-  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
-  const apiUrl = `${backendUrl}/api/admin/${activeTab}`;
+  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL).replace(/\/+$/, "");
+  const apiUrl = `${backendUrl}/api/admin/greetings`;
 
   const { data, isLoading } = useQuery({
-    queryKey: [activeTab, search],
+    queryKey: ["greetings", search],
     queryFn: async () => {
       const url = apiUrl.startsWith("http") ? new URL(apiUrl) : new URL(apiUrl, window.location.origin);
       if (search) url.searchParams.append("query", search);
@@ -38,7 +37,7 @@ export default function ConversationsPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [activeTab] });
+      queryClient.invalidateQueries({ queryKey: ["greetings"] });
       setIsDrawerOpen(false);
     }
   });
@@ -50,7 +49,7 @@ export default function ConversationsPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [activeTab] });
+      queryClient.invalidateQueries({ queryKey: ["greetings"] });
     }
   });
 
@@ -64,7 +63,7 @@ export default function ConversationsPage() {
     } else {
       setFormData({
         name: "",
-        intent: activeTab === "greetings" ? "Greeting" : "Farewell",
+        intent: "Greeting",
         priority: 50,
         aliasText: "",
         regex: "",
@@ -95,47 +94,22 @@ export default function ConversationsPage() {
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Conversations</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage standard bot greetings and farewells.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Greetings</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage standard bot greetings.</p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex space-x-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit">
-        <button
-          onClick={() => { setActiveTab("greetings"); setSearch(""); }}
-          className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            activeTab === "greetings" 
-              ? "bg-white dark:bg-slate-900 text-blue-600 shadow-sm" 
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <Hand className="w-4 h-4 mr-2" />
-          Greetings
-        </button>
-        <button
-          onClick={() => { setActiveTab("farewells"); setSearch(""); }}
-          className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            activeTab === "farewells" 
-              ? "bg-white dark:bg-slate-900 text-blue-600 shadow-sm" 
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <MessageSquare className="w-4 h-4 mr-2" />
-          Farewells
-        </button>
-      </div>
 
       <div className="flex flex-col h-full bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
         {/* Header */}
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-xl">
-          <h2 className="text-lg font-semibold capitalize">{activeTab}</h2>
+          <h2 className="text-lg font-semibold capitalize">Greetings</h2>
           <div className="flex gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input 
                 type="text"
-                placeholder={`Search ${activeTab}...`}
+                placeholder="Search greetings..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 pr-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-w-[250px]"
@@ -234,7 +208,7 @@ export default function ConversationsPage() {
           <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setIsDrawerOpen(false)} />
           <div className="relative w-[400px] bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 border-l border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
-              <h3 className="font-semibold text-lg">{editingItem ? "Edit" : "New"} {activeTab === "greetings" ? "Greeting" : "Farewell"}</h3>
+              <h3 className="font-semibold text-lg">{editingItem ? "Edit" : "New"} Greeting</h3>
               <button onClick={() => setIsDrawerOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
